@@ -53,6 +53,11 @@
       <div class="section-title"><div><p class="eyebrow">Audit trail</p><h2 id="recent-title">Recent observations</h2></div></div>
       <div class="table-wrap"><table><thead><tr><th>Observed in Belgium</th><th>From → to</th><th>Planned slot</th><th>Travel</th><th>Delay</th><th>Weather</th><th>School</th><th>Light</th><th>Road events</th><th>Provider</th><th>Status</th></tr></thead><tbody id="recent"></tbody></table></div>
     </section>
+    <section class="panel" aria-labelledby="latest-title">
+      <div class="section-title"><div><p class="eyebrow">Live feed</p><h2 id="latest-title">Latest API calls</h2></div><span id="latest-updated" class="chip">—</span></div>
+      <p class="muted small">The 10 most recent measurements across all commutes, independent of the filters above.</p>
+      <div class="table-wrap"><table><thead><tr><th>Measured in Belgium</th><th>Commute</th><th>From → to</th><th>Type</th><th>Travel</th><th>Delay</th><th>Provider</th><th>Status</th></tr></thead><tbody id="latest"></tbody></table></div>
+    </section>
     <footer>Times are stamped when the API request starts. Weather: <a href="https://open-meteo.com/en/docs/historical-weather-api">Open-Meteo</a>. Flemish road events: © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum.</footer>
   </main>
   <script src="commutes.js"></script>

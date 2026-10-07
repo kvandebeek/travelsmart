@@ -170,6 +170,30 @@ function render() {
   renderChart(good); renderTable(selected);
 }
 
+const tierLabel = tier => ({core: 'Priority', rotating: 'Rotation', extra: 'Random'})[tier] || tier;
+
+async function renderLatest() {
+  const body = $('latest'); body.replaceChildren();
+  const response = await fetch('data/commutes/latest.json');
+  const feed = response.ok ? await response.json() : {calls: []};
+  if (feed.generated_at) setText('latest-updated', `Updated ${fmt.format(new Date(feed.generated_at))}`);
+  for (const row of feed.calls) {
+    const route = routeOf(row);
+    const journey = !route ? row.route_id : row.direction === 'morning'
+      ? `${route.home_place} → ${route.work_place}` : `${route.work_place} → ${route.home_place}`;
+    const commute = !route ? '—' : row.direction === 'morning'
+      ? `${town(route.home_area)} → ${town(route.work_area)}` : `${town(route.work_area)} → ${town(route.home_area)}`;
+    const status = row.status === 'ok' ? 'OK' : row.status === 'error' ? `Error (${row.error_type || '?'})` : row.status;
+    const tr = document.createElement('tr');
+    for (const value of [fmt.format(new Date(row.observed_at)), commute, journey, tierLabel(row.tier),
+                         minutes(row.duration_seconds), minutes(delay(row)), row.provider === 'here' ? 'HERE' : 'TomTom', status]) {
+      const td = document.createElement('td'); td.textContent = value; tr.append(td);
+    }
+    body.append(tr);
+  }
+  if (!body.children.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 8; td.textContent = 'No API calls yet.'; tr.append(td); body.append(tr); }
+}
+
 async function start() {
   try {
     const response = await fetch('data/commutes/index.json');
@@ -181,6 +205,7 @@ async function start() {
     $('route').addEventListener('change', () => { fillPlaces(); render(); });
     ['home-place','work-place','direction','provider','rain','school','light','events','weekday'].forEach(id => $(id).addEventListener('change', render));
     $('month').addEventListener('change', () => loadMonth().catch(showError));
+    renderLatest().catch(() => {});
     await loadMonth();
   } catch (error) { showError(error); }
 }

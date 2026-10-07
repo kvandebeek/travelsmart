@@ -152,3 +152,22 @@ def test_daytime_stream_draws_from_everything_and_both_directions():
     random_only = {r["id"] for r in routes if r["tier"] == "random"}
     assert random_only and random_only & {p.route_id for p in daytime}
     assert not random_only & {p.route_id for p in polls if p.tier in ("core", "rotating")}
+
+
+def test_latest_feed_has_the_ten_newest_calls(tmp_path):
+    from travelsmart.commute_export import export_commutes
+    data = tmp_path / "observations" / "commutes"
+    data.mkdir(parents=True)
+    for month, day0 in (("2026-09", 1), ("2026-10", 1)):
+        rows = [{"provider": "tomtom", "account": "tomtom_morning", "route_id": "x__y", "direction": "morning",
+                 "tier": "core", "scheduled_at": f"{month}-{day0 + i:02d}T07:10:00+02:00",
+                 "observed_at": f"{month}-{day0 + i:02d}T05:10:00+00:00", "status": "ok", "duration_seconds": 60 * i}
+                for i in range(8)]
+        (data / f"{month}.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    out = tmp_path / "public"
+    export_commutes(data_dir=tmp_path / "observations", output_dir=out)
+    feed = json.loads((out / "latest.json").read_text(encoding="utf-8"))["calls"]
+    assert len(feed) == 10
+    assert feed[0]["observed_at"] == "2026-10-08T05:10:00+00:00"  # newest first
+    assert feed[-1]["observed_at"].startswith("2026-09-07")
+    assert all("account" not in row for row in feed)

@@ -1,8 +1,8 @@
 name: Extra route stream
 
 # One pseudo-random route from `extra_routes` in config/commute_schedule.yaml
-# every few minutes during the peaks. Collects and commits only; the main
-# workflow publishes the dashboard at its own slots.
+# per tick (peak focus list and daytime stream). Collects, commits, then
+# republishes the dashboard so the latest calls are visible.
 on:
   workflow_dispatch:
   schedule:
@@ -16,6 +16,8 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 concurrency:
   group: extra-route-stream  # separate queue: never displaces a regular slot run
@@ -26,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     # The API keys are environment secrets of the "Master" environment.
     environment: Master
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,6 +43,7 @@ jobs:
           TOMTOM_API_KEY2: ${{ secrets.TOMTOM_API_KEY2 }}
         run: python scripts/run_commute_tick.py --stream extra --execute
       - name: Commit observation files
+        id: commit
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -50,4 +55,31 @@ jobs:
               git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
               sleep $((attempt * 5))
             done
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+  publish:
+    needs: collect
+    if: needs.collect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy  # shared with the main workflow; the newest waiting deploy wins
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}  # branch head, including the observations just committed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -e .
+      - name: Build static dashboard data
+        run: |
+          python -m travelsmart export
+          python scripts/export_commutes.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - uses: actions/deploy-pages@v4

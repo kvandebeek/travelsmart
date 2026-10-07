@@ -33,10 +33,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  collect-and-publish:
+  collect:
     runs-on: ubuntu-latest
     # The API keys are environment secrets of the "Master" environment.
     environment: Master
+    outputs:
+      changed: ${{ steps.commit.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -69,6 +71,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '10 12 * * *'
         run: python scripts/enrich_commute_weather.py
       - name: Commit observation files
+        id: commit
         if: github.event_name != 'push'
         run: |
           git config user.name "github-actions[bot]"
@@ -81,7 +84,26 @@ jobs:
               git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && break
               sleep $((attempt * 5))
             done
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+
+  publish:
+    needs: collect
+    # Code pushes and manual runs always publish; scheduled runs only when they stored data.
+    if: github.event_name != 'schedule' || needs.collect.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pages-deploy  # shared with the extra stream; the newest waiting deploy wins
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}  # branch head, including the observations just committed
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -e .
       - name: Build static dashboard data
         run: |
           python -m travelsmart export

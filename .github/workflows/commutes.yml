@@ -34,6 +34,8 @@ concurrency:
 jobs:
   collect-and-publish:
     runs-on: ubuntu-latest
+    # The API keys are environment secrets of the "Master" environment.
+    environment: Master
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -41,6 +43,16 @@ jobs:
           python-version: '3.12'
       - name: Install
         run: python -m pip install -e .
+      - name: Check API key secrets are present
+        env:
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          TOMTOM_API_KEY2: ${{ secrets.TOMTOM_API_KEY2 }}
+          HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
+        run: |
+          # Reports presence only; values are never printed.
+          for name in TOMTOM_API_KEY TOMTOM_API_KEY2 HERE_API_KEY; do
+            if [ -n "${!name}" ]; then echo "::notice::$name is set"; else echo "::warning::$name is missing"; fi
+          done
       - name: Collect a due commute slot
         if: github.event_name != 'push' && github.event.schedule != '10 12 * * *'
         env:

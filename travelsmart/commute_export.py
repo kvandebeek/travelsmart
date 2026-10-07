@@ -66,6 +66,9 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
                                                        separators=(",", ":")), encoding="utf-8")
     (output_dir / "map.json").write_text(json.dumps(build_map(routes, catalogue, all_travel, config_dir, index["generated_at"]),
                                                     separators=(",", ":")), encoding="utf-8")
+    geometry = config_dir / "commute_geometry.json"  # road paths, scripts/build_map_geometry.py
+    if geometry.exists():
+        (output_dir / "geometry.json").write_text(geometry.read_text(encoding="utf-8"), encoding="utf-8")
     return {"months": len(months), "routes": len(routes), "observations": sum(x["calls"] for x in month_stats)}
 
 
@@ -89,7 +92,7 @@ def _bucket(observed_at: str) -> str | None:
 
 
 def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_dir: Path, generated_at: str) -> dict:
-    """Per start town, destination and half hour: how congested trips usually are.
+    """Per start town, destination and half hour: how congested trips usually are, and how long they take.
 
     Morning measurements run home town -> employment area, evening ones the other way,
     so a town is a start point for both. Corridor business parks (random-only) are
@@ -115,7 +118,7 @@ def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_di
         if work_key[route["id"]] in origins:
             destinations[work_key[route["id"]]].add(route["home_area"])
     by_id = {r["id"]: r for r in routes}
-    samples: dict[tuple, list[float]] = defaultdict(list)
+    samples: dict[tuple, list[tuple[float, float]]] = defaultdict(list)
     for row in travel:
         route = by_id.get(row["route_id"])
         if not route or row.get("status") != "ok" or not row.get("freeflow_seconds"):
@@ -126,10 +129,13 @@ def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_di
         home, work = route["home_area"], work_key[route["id"]]
         origin, destination = (home, work) if row["direction"] == "morning" else (work, home)
         if origin in origins:
-            samples[origin, destination, bucket].append(row["duration_seconds"] / row["freeflow_seconds"] - 1)
+            samples[origin, destination, bucket].append(
+                (row["duration_seconds"] / row["freeflow_seconds"] - 1, row["duration_seconds"] / 60))
     stats: dict[str, dict] = defaultdict(lambda: defaultdict(dict))
     for (origin, destination, bucket), values in samples.items():
-        stats[origin][destination][bucket] = [len(values), round(max(0.0, median(values)), 3)]
+        # [measurements, median congestion share, median travel time in whole minutes]
+        stats[origin][destination][bucket] = [len(values), round(max(0.0, median(v[0] for v in values)), 3),
+                                              round(median(v[1] for v in values))]
     buckets = []
     moment = datetime(2000, 1, 1, MAP_HOURS[0])
     while moment.hour < MAP_HOURS[1]:

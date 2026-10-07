@@ -207,3 +207,23 @@ def test_corridors_every_regular_slot_both_directions_within_budget():
     assert {p.scheduled_at for p in corridor} == regular_times      # same moments as the regular slots
     for account in schedule["tomtom_accounts"].values():
         assert sum(p.account == account["id"] for p in polls) <= account["monthly_limit"] - account["reserve"]
+
+
+def test_rolling_30_day_cap_spans_the_month_boundary(tmp_path, monkeypatch):
+    account = yaml.safe_load((ROOT / "config" / "commute_schedule.yaml").read_text(encoding="utf-8"))["tomtom_accounts"]["morning"]
+    config = _config_copy(tmp_path)
+    data = tmp_path / "observations"
+    (data / "commutes").mkdir(parents=True)
+    # A full allowance used on 29 September: last month, but inside the 30 days before 7 October.
+    row = json.dumps({"provider": "tomtom", "account": account["id"], "route_id": "x", "direction": "morning",
+                      "status": "ok", "scheduled_at": "2026-09-29T07:10:00+02:00",
+                      "observed_at": "2026-09-29T05:10:00+00:00"})
+    (data / "commutes" / "2026-09.jsonl").write_text((row + "\n") * (account["monthly_limit"] - account["reserve"]),
+                                                     encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(commute_live, "fetch_live_route", lambda *args: calls.append(args))
+    monkeypatch.setattr(commute_live, "fetch_datex_snapshot", lambda url: None)
+    monkeypatch.setenv("TOMTOM_API_KEY", "test")
+    now = datetime(2026, 10, 7, 7, 12, tzinfo=ZoneInfo("Europe/Brussels"))
+    result = commute_live.run_tick(now, execute=True, config_dir=config, data_dir=data)
+    assert result["due"] > 0 and result["attempted"] == 0 and calls == []   # calendar month is empty, rolling is full

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -126,6 +126,16 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
             monthly_used[row["account"]] += 1
     completed |= {("tomtom", row.get("account"), f"corridor:{row['corridor']}:{row['direction']}", row.get("scheduled_at"))
                   for row in corridor_rows}
+    # Rolling 30 days on top of the calendar month: safe whether a provider counts its free
+    # allowance per calendar month or per period from the sign-up date.
+    window_start = now - timedelta(days=30)
+    previous_month = local.replace(day=1) - timedelta(days=1)
+    recent = [row for month in {f"{previous_month:%Y-%m}", f"{local:%Y-%m}"} for folder in ("commutes", "corridors")
+              for row in read_observations(data_dir / folder / f"{month}.jsonl")
+              if datetime.fromisoformat(row["observed_at"]) >= window_start]
+    rolling_used = {account_id: sum(row["provider"] == "tomtom" and row.get("account") == account_id for row in recent)
+                    for account_id in accounts}
+    here_rolling = sum(row["provider"] == "here" for row in recent)
     attempts = stored = 0
     for poll in polls:
         account_id = poll.account if provider == "tomtom" else "here"
@@ -134,15 +144,16 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
             continue
         if provider == "tomtom":
             account_config = accounts[account_id]
-            if monthly_used[account_id] >= account_config["monthly_limit"] - account_config["reserve"]:
+            if max(monthly_used[account_id], rolling_used[account_id]) >= account_config["monthly_limit"] - account_config["reserve"]:
                 break
         if provider == "here" and (here_used_today >= schedule["here_daily_limit"]
-                                   or here_used_month >= schedule["here_monthly_limit"]):
+                                   or max(here_used_month, here_rolling) >= schedule["here_monthly_limit"]):
             break
         if poll.tier == "corridor":
             _, corridor, way = poll.route_id.split(":")
             attempts += 1
             monthly_used[account_id] += 1
+            rolling_used[account_id] += 1
             row = measure_corridor(corridor, way, os.environ[accounts[account_id]["key_env"]], account_id,
                                    scheduled_at=poll.scheduled_at.isoformat(), config_dir=config_dir, data_dir=data_dir)
             stored += row["status"] == "ok"
@@ -159,9 +170,11 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
         attempts += 1
         if provider == "tomtom":
             monthly_used[account_id] += 1
+            rolling_used[account_id] += 1
         else:
             here_used_today += 1
             here_used_month += 1
+            here_rolling += 1
         try:
             key = os.environ[accounts[account_id]["key_env"]] if provider == "tomtom" else os.environ["HERE_API_KEY"]
             result = fetch_live_route(provider, origin, destination, key)

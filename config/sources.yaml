@@ -5,3 +5,8 @@ miv:
   data_url: https://miv-opendata.belfla.be/miv/verkeersdata
   config_url: https://miv-opendata.belfla.be/miv/configuratie/xml
   extra_ca: config/certs/digicert-global-g2-tls-rsa-sha256-2020-ca1.pem   # public DigiCert intermediate the server fails to send
+
+datex:
+  # Flemish Traffic Center DATEX II v3 events: jams (with queue length), accidents, obstructions, roadworks, lane
+  # closures. Creative Commons Attribution (transportdata.be); credit "Agentschap Wegen en Verkeer - Vlaams Verkeerscentrum".
+  url: https://www.verkeerscentrum.be/uitwisseling/datex2v3full

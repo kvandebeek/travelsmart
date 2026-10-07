@@ -1,0 +1,77 @@
+name: Commute observations and dashboard
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+  schedule:
+    - cron: '0,20,40 5 * * 1-5'
+      timezone: Europe/Brussels
+    - cron: '0,20,40,55 6 * * 1-5'
+      timezone: Europe/Brussels
+    - cron: '10,25,40,55 7 * * 1-5'
+      timezone: Europe/Brussels
+    - cron: '10,25,40 8 * * 1-5'
+      timezone: Europe/Brussels
+    - cron: '0 9 * * 1-5'
+      timezone: Europe/Brussels
+    - cron: '0,30 14-17 * * 1-5'
+      timezone: Europe/Brussels
+    - cron: '0 18 * * 1-5'
+      timezone: Europe/Brussels
+    - cron: '10 12 * * *'
+      timezone: Europe/Brussels
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: commute-observations
+  cancel-in-progress: false
+
+jobs:
+  collect-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -e .
+      - name: Collect a due commute slot
+        if: github.event_name != 'push' && github.event.schedule != '10 12 * * *'
+        env:
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          TOMTOM_API_KEY2: ${{ secrets.TOMTOM_API_KEY2 }}
+        run: python scripts/run_commute_tick.py --execute
+      - name: Collect a small HERE comparison sample
+        if: github.event_name != 'push' && github.event.schedule != '10 12 * * *'
+        env:
+          HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
+        run: python scripts/run_commute_tick.py --provider here --execute
+      - name: Add historical weather to completed observations
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '10 12 * * *'
+        run: python scripts/enrich_commute_weather.py
+      - name: Commit observation files
+        if: github.event_name != 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A observations
+          if ! git diff --cached --quiet; then
+            git commit -m "Record commute observations"
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+      - name: Build static dashboard data
+        run: |
+          python -m travelsmart export
+          python scripts/export_commutes.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - uses: actions/deploy-pages@v4

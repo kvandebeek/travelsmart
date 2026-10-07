@@ -1,59 +1,164 @@
-# TravelSmart Belgium
+<div align="center">
 
-TravelSmart is a small, open foundation for a Belgian travel-time index. Version 0.1 monitors driving journeys between 56 Belgian towns: the five largest municipalities of each province plus a few extra Limburg towns around Diepenbeek.
+# 🚗 TravelSmart Belgium
 
-It records **baseline routing estimates** from an OpenStreetMap-based OSRM router. It does not claim that values represent real historical traffic conditions.
+### When should you leave? Real commutes, measured every working day.
 
-## Architecture
+[![Commute observations](https://github.com/kvandebeek/travelsmart/actions/workflows/commutes.yml/badge.svg)](https://github.com/kvandebeek/travelsmart/actions/workflows/commutes.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Runs on GitHub Actions](https://img.shields.io/badge/runs%20on-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
+![Open data](https://img.shields.io/badge/data-open%20%26%20free%20tiers-2ea44f)
+![No build step](https://img.shields.io/badge/dashboard-zero%20build%20step-ff69b4)
 
-Configuration (`config/`) defines locations and directional journeys. Collection writes every route estimate to SQLite. Analytics calculate P10 / median / P90 from the stored observations. `export` creates static JSON consumed by the plain HTML dashboard, independently of the API. The OSRM adapter is replaceable and a self-hosted OSRM instance is the intended production choice; the default public endpoint is for development only.
+**[📊 Commute dashboard](https://kvandebeek.github.io/travelsmart/commutes.html)** · **[🗺️ Baseline dashboard](https://kvandebeek.github.io/travelsmart/)** · **[📚 Catalogue notes](docs/commute-catalogue.md)**
 
-The locations are configurable in `config/locations.yaml`: Diepenbeek uses the town-hall point (Gemeenteplein 1), while Brussels uses Brussels Town Hall at Grand-Place.
+</div>
 
-## Install and run
+---
 
-Requires Python 3.10+.
+TravelSmart measures how long typical Belgian car commutes actually take: from a **residential neighbourhood to an employment area in the morning**, and back again in the evening. It records a time slot every 15–30 minutes on every working day. Over a few months, that builds up enough data to answer questions like:
+
+> *“If I leave Diepenbeek at 07:10 instead of 07:40, how much time do I save, and does rain or the school holidays change that?”*
+
+It does not just show a minute count. It shows each **best moment to leave**, with each observation tied to the weather, school calendar, daylight and nearby road events at the time.
+
+## ✨ What's inside
+
+| | |
+|---|---|
+| 🏘️ **446 candidate commutes** | 37 areas, each with a real residential neighbourhood (*Kessel-Lo, Sint-Amandsberg, Rooierheide…*) and an employment area (*Corda Campus, The Loop, European Quarter…*). |
+| 📏 **Sensible routes only** | Trips under **12 km** of road distance are excluded. Very long trips, such as Maaseik → Oostende, go on a watchlist and may later be split at a shared motorway point. |
+| 🗓️ **Budget-aware planner** | A deterministic monthly plan skips weekends and Belgian public holidays, measures 20 priority routes in every slot, and rotates the rest so each is seen in every slot each month. |
+| 🔑 **Multi-account aware** | Two TomTom accounts (morning and evening) and one HERE account, each with its own budget and reserve. Every observation records which account produced it. |
+| 🌦️ **Weather join** | Hourly Open-Meteo reanalysis at the origin when leaving and the destination on arrival. |
+| 🏫 **School calendars** | Flemish and French Community school days, both kept, because Brussels traffic feels both. |
+| 🌗 **Daylight** | Daylight, twilight or dark at departure and arrival, from a solar-position calculation. |
+| 🚧 **Road events** | Live Flemish DATEX II jams, accidents, roadworks and lane closures within 500 m of the actual route geometry. |
+| 📊 **Static dashboard** | Plain HTML, CSS and JavaScript on GitHub Pages, with filters for rain, school, daylight, weekday, account and road events. |
+
+## 🧭 How it works
+
+```mermaid
+flowchart LR
+    A["⏰ GitHub Actions<br/>Europe/Brussels cron"] --> B{"Planner<br/>which routes are due?"}
+    B -->|morning| C["TomTom #1<br/>home → work"]
+    B -->|evening| D["TomTom #2<br/>work → home"]
+    B -->|small sample| E["HERE<br/>cross-check"]
+    C & D & E --> F["observations/*.jsonl<br/>committed to the repo"]
+    G["Open-Meteo<br/>(5 days later)"] --> F
+    H["Flemish DATEX II<br/>road events"] --> C & D
+    F --> I["📊 GitHub Pages<br/>dashboard"]
+```
+
+1. **Schedule.** The workflow fires on weekday slots from 05:00 to 09:00 and from 14:00 to 18:00, Brussels time, including during daylight-saving changes.
+2. **Plan.** `commute_planner` works out which commutes belong to this slot. The plan is reproducible, so the same month always produces the same plan.
+3. **Measure.** Each due route is requested *right now*, with live traffic, and stamped with the **actual request time**. A late GitHub run is stored at its real time; a missed slot stays missing. Nothing is backfilled or faked.
+4. **Enrich.** Five days later, once the archive has caught up, the daily job adds historical weather at both ends of each journey.
+5. **Publish.** Observations are committed as monthly JSONL files and the dashboard is rebuilt.
+
+### 💰 The October 2026 budget
+
+| | Morning (TomTom #1) | Evening (TomTom #2) |
+|---|---:|---:|
+| Slots per working day | 15 | 9 |
+| Working days | 22 | 22 |
+| Planned calls | 17,490 | 10,494 |
+| Free monthly allowance | 20,000 | 20,000 |
+| Kept in reserve | 2,000 | 2,000 |
+
+Run `python scripts/plan_commutes.py --month 2026-10` to recompute it. No API calls are spent.
+
+## 🚦 Project status
+
+> [!IMPORTANT]
+> The full pipeline is wired up, but **live collection is off until commute endpoints are verified**.
+> `config/commute_anchors.yaml` is intentionally empty. A route becomes collectable only after both endpoints have a verified public-road access point and the route has a measured road distance of at least 12 km. Until then, every scheduled run is a safe no-op.
+
+| Component | State |
+|---|---|
+| Commute catalogue and monthly planner | ✅ Ready |
+| Live TomTom/HERE collector with budget guards | ✅ Ready, waiting for anchors |
+| Weather, school, daylight and road-event context | ✅ Ready |
+| Commute dashboard | ✅ Ready, shows “no data yet” |
+| Verified home and work access points | ⏳ Next step |
+| HERE daily allowance | ⏳ `here_daily_limit: 0` until confirmed |
+| Corridor splitting for long routes | 🧪 Design only |
+
+## 🚀 Quick start
+
+Requires Python 3.10 or newer.
 
 ```bash
 python -m venv .venv
-.venv/bin/pip install -e ".[dev]" # Windows: .venv\Scripts\pip install -e ".[dev]"
-python -m travelsmart collect
-python -m travelsmart export
-```
-
-Open `public/index.html` using a static file server (for example `python -m http.server --directory public 8080`) and visit `http://localhost:8080`. Browsers restrict `fetch` from a directly opened `file://` page, so serving it locally is recommended.
-
-To run the local API and dashboard together:
-
-```bash
-uvicorn travelsmart.main:app --reload
-```
-
-Open `http://127.0.0.1:8000/docs` for the API. Available endpoints include `/api/health`, `/api/locations`, `/api/journeys`, and journey-specific measurements and statistics.
-
-## Configuration and scheduler
-
-Location coordinates live in `config/locations.yaml`; directional journeys and weekday collection windows live in `config/journeys.yaml`. The default windows are weekdays 05:30–09:30 and 15:00–19:00, every 15 minutes. Run the scheduler on the Raspberry Pi with:
-
-```bash
-python scripts/run_scheduler.py
-```
-
-It operates on every active configured journey, never hard-coded IDs. Environment settings are documented in `.env.example`.
-
-`all_pairs: all` in `config/journeys.yaml` creates one journey for every ordered pair of towns (56 × 55 = 3,080). Collection fetches routes in parallel (`--workers` / `TRAVELSMART_COLLECT_WORKERS`, default 8) and writes each batch to SQLite from a single thread, with one shared timestamp per tick. A full tick is thousands of routing requests, so use a **self-hosted OSRM** for that; the public demo server will throttle you. To start with fewer, list town ids under `all_pairs` instead of `all`. New towns show `n/a` until collected: `python -m travelsmart collect --missing`.
-
-## Static export and tests
-
-```bash
-python -m travelsmart export
+.venv/bin/pip install -e ".[dev]"   # Windows: .venv\Scripts\pip install -e ".[dev]"
 pytest
+
+python scripts/plan_commutes.py --month 2026-10          # inspect the plan
+python scripts/plan_commutes.py --day 2026-10-12         # one day's polls
+python scripts/run_commute_tick.py                       # dry run: what's due now?
+python scripts/export_commutes.py                        # build dashboard data
+python -m http.server --directory public 8080            # open http://localhost:8080/commutes.html
 ```
 
-Export writes `public/data/index.json`, locations, journeys, and one JSON detail document per journey. Copy `public/` to GitHub Pages after export.
+### Turning on live collection
 
-The dashboard is three plain files (`index.html`, `style.css`, `app.js`) with no build step: a route picker, a heat-coloured matrix of typical times, and a detail card with a Fast / Typical / Slow range bar plus departure-time and weekday breakdowns. Routes are deep-linkable (`#diepenbeek_brussels`) and it follows the system light/dark setting. Routes with fewer than `reliable_samples` (default 20, in `config/journeys.yaml`) samples are labelled "Preview".
+1. Add verified coordinates to `config/commute_anchors.yaml`:
+   ```yaml
+   home:
+     diepenbeek: [50.9xx, 5.4xx]        # a street in Rooierheide, not a town hall
+   work:
+     brussels_european: [50.8xx, 4.3xx] # public road at the European Quarter
+   validated_routes:
+     diepenbeek__brussels_european: {road_distance_km: 81.2}
+   ```
+2. Add the repository secrets **`TOMTOM_API_KEY`** (morning account), **`TOMTOM_API_KEY2`** (evening account) and **`HERE_API_KEY`**.
+3. Enable **Settings → Pages → Source: GitHub Actions**.
+4. When the HERE allowance is confirmed, set `here_daily_limit` in `config/commute_schedule.yaml`.
 
-## Known limitations
+## 🗂️ Project map
 
-v0.1 is driving-only. Town lists are per-province top-5 by municipal population from memory (not verified against Statbel) and can be edited in `config/locations.yaml`. OSRM routes do not contain live traffic. The testing threshold is currently one sample (`sufficient_samples` in `config/journeys.yaml`); raise it before treating P10/P90 as meaningful. Public OSRM servers must not be relied upon for production; self-host OSRM or introduce another permitted provider behind the provider interface.
+```
+config/
+  commute_catalogue.yaml   areas, neighbourhoods, employment areas, cut-offs
+  commute_routes.csv       generated catalogue (scripts/build_commute_catalogue.py)
+  commute_schedule.yaml    slots, accounts, budgets, priority routes
+  commute_anchors.yaml     verified access points (the on-switch)
+travelsmart/
+  commute_planner.py       working days, holidays, budgeted monthly plan
+  commute_live.py          guarded TomTom/HERE collection → JSONL
+  commute_context.py       school calendars, daylight, DATEX road events
+  commute_weather.py       Open-Meteo historical join
+  commute_export.py        static JSON for the dashboard
+observations/              commute and weather JSONL, committed by the workflow
+public/                    dashboards (no build step)
+```
+
+## 🗺️ Also included: the OSRM baseline and Flemish live feeds
+
+The original v0.1 is still here: a **baseline travel-time index** for 56 Belgian towns (3,080 directional pairs) using an OpenStreetMap OSRM router, plus collectors for Flemish **MIV loop detectors** and **DATEX II road events**. These run locally or on a Raspberry Pi:
+
+```bash
+python -m travelsmart collect && python -m travelsmart export   # OSRM baseline
+python scripts/run_scheduler.py                                 # recurring baseline collection
+docker compose up -d                                            # MIV + DATEX pollers
+uvicorn travelsmart.main:app --reload                           # API at /docs
+```
+
+OSRM estimates have **no live traffic**. A spot check found rural routes close to reality, but city-centre routes 27–47 % optimistic. Treat them as a baseline, not as commute times. Use a self-hosted OSRM for full collection runs; the public demo server will throttle you.
+
+## 🙏 Data sources and attribution
+
+| Source | Used for | Terms |
+|---|---|---|
+| [TomTom Routing API](https://developer.tomtom.com/routing-api/documentation) | Live commute times | Free tier, per account |
+| [HERE Routing v8](https://www.here.com/docs/bundle/routing-api-developer-guide-v8/page/README.html) | Cross-check sample | Free tier |
+| [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api) | Historical weather | CC BY 4.0 |
+| [Vlaams Verkeerscentrum DATEX II](https://www.verkeerscentrum.be/) | Road events | CC BY. © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum |
+| [MIV open data](https://miv-opendata.belfla.be/) | Loop-detector speeds | Open data |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) via OSRM | Baseline routes | ODbL |
+
+Raw provider responses are not stored. Only derived travel time, distance and delay figures are kept, with the time of each request.
+
+<div align="center">
+<sub>Built for Belgian commuters who would rather spend 20 minutes at home than in a traffic jam on the E40.</sub>
+</div>

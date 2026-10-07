@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TravelSmart · Live commutes</title>
+  <link rel="stylesheet" href="commutes.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">TravelSmart Belgium</p><h1>Commute observations</h1>
+        <p class="intro">Actual collection times, travel estimates and the weather around each journey.</p></div>
+      <a href="index.html">Baseline dashboard</a>
+    </header>
+    <section class="metrics" aria-label="Collection summary">
+      <article><span>API calls</span><strong id="calls">—</strong></article>
+      <article><span>Successful observations</span><strong id="success">—</strong></article>
+      <article><span>Routes covered</span><strong id="covered">—</strong></article>
+      <article><span>Weather matched</span><strong id="weather-count">—</strong></article>
+    </section>
+    <section class="panel filters" aria-label="Filters">
+      <label>Month <select id="month"></select></label>
+      <label>Route <select id="route"></select></label>
+      <label>Direction <select id="direction"><option value="morning">Morning · home to work</option><option value="evening">Evening · work to home</option></select></label>
+      <label>Provider <select id="provider"><option value="all">All providers</option><option value="tomtom">TomTom</option><option value="here">HERE</option></select></label>
+      <label>Account <select id="account"><option value="all">All accounts</option><option value="tomtom_morning">TomTom morning</option><option value="tomtom_evening">TomTom evening</option><option value="here">HERE</option></select></label>
+      <label>Rain <select id="rain"><option value="all">Any / pending</option><option value="wet">Rain</option><option value="dry">Dry</option><option value="unknown">Weather pending</option></select></label>
+      <label>School calendar <select id="school"><option value="all">Any</option><option value="flanders_school">Flanders school day</option><option value="flanders_break">Flanders break</option><option value="fwb_school">French Community school day</option><option value="fwb_break">French Community break</option></select></label>
+      <label>Daylight <select id="light"><option value="all">Any</option><option value="daylight">Daylight</option><option value="twilight">Twilight</option><option value="dark">Dark</option></select></label>
+      <label>Flemish road events <select id="events"><option value="all">Any</option><option value="near">Nearby event</option><option value="clear">No nearby event</option><option value="unknown">No event context</option></select></label>
+      <label>Weekday <select id="weekday"><option value="all">All weekdays</option><option value="0">Monday</option><option value="1">Tuesday</option><option value="2">Wednesday</option><option value="3">Thursday</option><option value="4">Friday</option></select></label>
+    </section>
+    <section class="panel" aria-labelledby="accounts-title"><div class="section-title"><div><p class="eyebrow">Separate allowances</p><h2 id="accounts-title">Provider accounts</h2></div></div><div id="account-usage" class="account-usage"></div></section>
+    <section class="panel" aria-labelledby="route-title">
+      <div class="section-title"><div><p class="eyebrow">Selected journey</p><h2 id="route-title">Choose a route</h2></div><span id="sample-count" class="chip">0 samples</span></div>
+      <p id="route-meta" class="muted"></p>
+      <div class="route-metrics">
+        <div><span>Median travel time</span><strong id="median-time">—</strong></div>
+        <div><span>Median traffic delay</span><strong id="median-delay">—</strong></div>
+        <div><span>Observed range</span><strong id="range">—</strong></div>
+      </div>
+      <div id="chart" class="chart" role="img" aria-label="Travel times by departure time"></div>
+      <p class="muted small">Each dot is one direct provider observation. Blue means rain near an endpoint during the preceding hour; green means no rain was recorded there. The line shows the median for each departure slot.</p>
+    </section>
+    <section class="panel" aria-labelledby="weather-title">
+      <div class="section-title"><div><p class="eyebrow">Weather comparison</p><h2 id="weather-title">Rain and traffic</h2></div><span class="chip">Descriptive</span></div>
+      <p id="weather-result" class="weather-result">Waiting for observations with weather.</p>
+      <p class="muted small">Wet and dry journeys are compared within the same route, direction and planned departure slot. This can reveal an association; it does not establish that rain caused a delay. Weather is hourly reanalysis near the endpoints, not a measurement along the entire road.</p>
+    </section>
+    <section class="panel" aria-labelledby="recent-title">
+      <div class="section-title"><div><p class="eyebrow">Audit trail</p><h2 id="recent-title">Recent observations</h2></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Observed in Belgium</th><th>Planned slot</th><th>Travel</th><th>Delay</th><th>Weather</th><th>School</th><th>Light</th><th>Road events</th><th>Account</th><th>Status</th></tr></thead><tbody id="recent"></tbody></table></div>
+    </section>
+    <footer>Times are stamped when the API request starts. Weather: <a href="https://open-meteo.com/en/docs/historical-weather-api">Open-Meteo</a>. Flemish road events: © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum.</footer>
+  </main>
+  <script src="commutes.js"></script>
+</body>
+</html>

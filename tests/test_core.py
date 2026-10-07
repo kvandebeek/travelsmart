@@ -177,3 +177,77 @@ def test_miv_dedupe_compares_instants_across_utc_offsets(tmp_path):
     with Session() as s:
         stored = s.get(SiteLatest, "A1@1").observed_utc
         assert stored.replace(tzinfo=None) == datetime(2026, 10, 6, 7, 10)  # stored as UTC
+
+def test_lambert72_matches_the_epsg_example_and_shifts_to_wgs84():
+    from travelsmart.lambert72 import to_bd72, to_wgs84
+    lat, lon = to_bd72(251763.20, 153034.13)  # EPSG guidance note 7-2: 50°40'46.461"N 5°48'26.533"E on BD72
+    assert abs(lat - (50 + 40 / 60 + 46.461 / 3600)) < 1e-6 and abs(lon - (5 + 48 / 60 + 26.533 / 3600)) < 1e-6
+    wlat, wlon = to_wgs84(251763.20, 153034.13)
+    shift_m = ((wlat - lat) * 111200) ** 2 + ((wlon - lon) * 70500) ** 2
+    assert 80 ** 2 < shift_m < 130 ** 2  # the BD72 -> WGS84 datum shift is about 100 m in Belgium
+
+def _datex_xml(published, records):
+    """records: (record id, xsi type, version, start, extra XML inside the record)."""
+    body = "".join(
+        f'<ns4:situation id="EVT{rid}"><ns2:situationRecord xsi:type="ns2:{kind}" id="{rid}" version="{version}">'
+        f'<ns2:situationRecordVersionTime>{published}</ns2:situationRecordVersionTime>'
+        f'<ns2:validity><validityStatus>active</validityStatus><validityTimeSpecification><overallStartTime>{start}</overallStartTime>'
+        f'</validityTimeSpecification></ns2:validity>{extra}</ns2:situationRecord></ns4:situation>' for rid, kind, version, start, extra in records)
+    return ('<ns4:payload xmlns="http://datex2.eu/schema/3/common" xmlns:ns2="http://datex2.eu/schema/3/situation" '
+            'xmlns:ns3="http://datex2.eu/schema/3/locationReferencing" xmlns:ns4="http://datex2.eu/schema/3/d2Payload" '
+            f'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><publicationTime>{published}</publicationTime>{body}</ns4:payload>').encode()
+
+def _jam(queue, pos_list):
+    return (f'<ns2:locationReference xsi:type="ns3:SingleRoadLinearLocation"><ns3:gmlLineString srsName="EPSG:31370">'
+            f'<ns3:posList>{pos_list}</ns3:posList></ns3:gmlLineString><ns3:alertCLinear><ns3:alertCDirection><ns3:alertCDirectionCoded>'
+            f'positive</ns3:alertCDirectionCoded></ns3:alertCDirection><ns3:alertCMethod4PrimaryPointLocation><ns3:alertCLocation>'
+            f'<ns3:specificLocation>11108</ns3:specificLocation></ns3:alertCLocation></ns3:alertCMethod4PrimaryPointLocation></ns3:alertCLinear>'
+            f'</ns2:locationReference><ns2:abnormalTrafficType>queuingTraffic</ns2:abnormalTrafficType><ns2:queueLength>{queue}</ns2:queueLength>')
+
+ROADWORKS = ("W1", "MaintenanceWorks", 1, "2026-09-01T06:00:00+02:00",
+             '<ns2:locationReference><ns3:pointByCoordinates><ns3:pointCoordinates><ns3:latitude>51.2</ns3:latitude>'
+             '<ns3:longitude>4.4</ns3:longitude></ns3:pointCoordinates></ns3:pointByCoordinates></ns2:locationReference>'
+             '<ns2:roadMaintenanceType>roadworks</ns2:roadMaintenanceType>')
+
+def test_datex_tracks_jam_lifetime_length_and_geometry(tmp_path):
+    import json
+    from travelsmart import datex
+    from travelsmart.db import JamObservation, TrafficEvent
+    Session = make_session_factory(f"sqlite:///{tmp_path / 'datex.db'}")
+    now = lambda hhmm: datetime.fromisoformat(f"2026-10-07T{hhmm}:30+02:00")
+    start = "2026-10-07T08:58:00+02:00"
+    with Session() as s:
+        first = datex.ingest(s, _datex_xml("2026-10-07T09:00:00+02:00", [("J1", "AbnormalTraffic", 3, start, _jam(500, "155215 210996 155515 211396")), ROADWORKS]), now("09:00"))
+        assert first == {"status": "stored", "records": 2, "jams": 1, "new": 2, "updated": 0, "ended": 0, "reopened": 0}
+        # longer and re-versioned: the geometry follows the longest queue; a shorter one later does not replace it
+        datex.ingest(s, _datex_xml("2026-10-07T09:02:00+02:00", [("J1", "AbnormalTraffic", 5, start, _jam(900, "155215 210996 155815 211796")), ROADWORKS]), now("09:02"))
+        third = datex.ingest(s, _datex_xml("2026-10-07T09:04:00+02:00", [("J1", "AbnormalTraffic", 7, start, _jam(300, "155215 210996 155415 211196")), ROADWORKS]), now("09:04"))
+        assert third["updated"] == 1 and third["ended"] == 0
+        jam = s.get(TrafficEvent, "J1")
+        assert (jam.kind, jam.subtype, jam.direction, jam.primary_location) == ("jam", "queuingTraffic", "positive", 11108)
+        assert jam.queue_length_m == 300 and jam.max_queue_length_m == 900 and len(json.loads(jam.geometry)) == 2
+        assert 50.5 < jam.min_lat <= jam.max_lat < 51.5 and 3.5 < jam.min_lon <= jam.max_lon < 4.5
+        assert [o.queue_length_m for o in s.query(JamObservation).order_by(JamObservation.observed_utc)] == [500, 900, 300]
+        # the jam leaves the feed: it has ended; the roadworks continue
+        gone = datex.ingest(s, _datex_xml("2026-10-07T09:06:00+02:00", [ROADWORKS]), now("09:06"))
+        assert gone["ended"] == 1 and gone["jams"] == 0
+        jam = s.get(TrafficEvent, "J1")
+        assert datex.as_utc(jam.gone_utc) == datetime(2026, 10, 7, 7, 6, tzinfo=timezone.utc)
+        assert datex.as_utc(jam.last_seen_utc) == datetime(2026, 10, 7, 7, 4, tzinfo=timezone.utc)
+        works = s.get(TrafficEvent, "W1")
+        assert works.gone_utc is None and works.kind == "roadworks" and json.loads(works.geometry) == [[51.2, 4.4]]
+
+def test_datex_never_closes_events_on_a_frozen_repeated_or_empty_feed(tmp_path):
+    import pytest
+    from travelsmart import datex
+    from travelsmart.db import TrafficEvent
+    Session = make_session_factory(f"sqlite:///{tmp_path / 'datex.db'}")
+    with Session() as s:
+        datex.ingest(s, _datex_xml("2026-10-07T09:00:00+02:00", [ROADWORKS]), datetime(2026, 10, 7, 7, 0, 30, tzinfo=timezone.utc))
+        # the same publication again (also when written with another UTC offset) is skipped
+        assert datex.ingest(s, _datex_xml("2026-10-07T08:00:00+01:00", []), datetime(2026, 10, 7, 7, 2, tzinfo=timezone.utc))["status"] == "duplicate"
+        # a publication that stopped advancing is not trusted to say what has ended
+        assert datex.ingest(s, _datex_xml("2026-10-07T09:01:00+02:00", []), datetime(2026, 10, 7, 8, 0, tzinfo=timezone.utc))["status"] == "stale"
+        with pytest.raises(ValueError):
+            datex.ingest(s, _datex_xml("2026-10-07T09:02:00+02:00", []), datetime(2026, 10, 7, 7, 2, 30, tzinfo=timezone.utc))
+        assert s.get(TrafficEvent, "W1").gone_utc is None

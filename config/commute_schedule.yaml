@@ -1,0 +1,43 @@
+timezone: Europe/Brussels
+morning_slots: ["05:00", "05:20", "05:40", "06:00", "06:20", "06:40", "06:55", "07:10", "07:25", "07:40", "07:55", "08:10", "08:25", "08:40", "09:00"]
+evening_slots: ["14:00", "14:30", "15:00", "15:30", "16:00", "16:30", "17:00", "17:30", "18:00"]
+
+# Two separate TomTom accounts. Morning calls use the first, evening calls the
+# second. Each account has its own reserve for manual checks and failures.
+tomtom_accounts:
+  morning: {id: tomtom_morning, key_env: TOMTOM_API_KEY, monthly_limit: 20000, reserve: 2000}
+  evening: {id: tomtom_evening, key_env: TOMTOM_API_KEY2, monthly_limit: 20000, reserve: 2000}
+# Every non-core route gets one sample per slot each month. Up to this many
+# routes get a second sample per slot, on a different working day.
+extra_rotating_routes_per_month: 300
+# Set only after confirming the allowance on the user's HERE account.
+here_daily_limit: 0
+here_routes_per_slot: 4
+
+# Only the ten national statutory dates are computed automatically. Company or
+# sector replacement days can be added here as YYYY-MM-DD dates.
+extra_excluded_dates: []
+
+# Proposed priority routes. They become collectable only after their home and
+# work access points and driving distance are validated in commute_anchors.yaml.
+core_routes:
+  - diepenbeek__brussels_european
+  - diepenbeek__leuven
+  - hasselt__brussels_european
+  - bilzen__brussels_european
+  - beringen__leuven
+  - ghent__brussels_north
+  - aalst__brussels_north
+  - mechelen__brussels_european
+  - leuven__brussels_european
+  - antwerp__brussels_north
+  - bruges__ghent
+  - oostende__bruges
+  - kortrijk__ghent
+  - roeselare__bruges
+  - ieper__kortrijk
+  - turnhout__antwerp
+  - lommel__hasselt
+  - charleroi__brussels_european
+  - namur__brussels_european
+  - genk__brussels_european

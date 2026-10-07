@@ -12,3 +12,10 @@ services:
     command: ["python", "scripts/run_miv_poller.py"]
     volumes: ["./data:/app/data", "./public/data:/app/public/data"]
     restart: unless-stopped
+
+  # Polls the Flemish events feed (jams, accidents, roadworks) every 2 minutes, around the clock.
+  datex-poller:
+    build: .
+    command: ["python", "scripts/run_datex_poller.py"]
+    volumes: ["./data:/app/data", "./public/data:/app/public/data"]
+    restart: unless-stopped

@@ -61,6 +61,50 @@ class SiteLatest(Base):
     speed_kmh: Mapped[float] = mapped_column(Float)
     flow: Mapped[int] = mapped_column(Integer)
 
+class TrafficEvent(Base):
+    """One DATEX II situation record (jam, accident, obstruction, roadworks, lane closure) and its lifetime.
+
+    The feed lists only current records and gives a jam no end time: a record that drops out of the feed has
+    ended. It was last seen at `last_seen_utc` and found gone at `gone_utc` (one poll later); for jams, which are
+    re-versioned every minute while they last, `version_time_utc` is the best estimate of when it ended.
+    """
+    __tablename__ = "traffic_events"
+    record_id: Mapped[str] = mapped_column(String(60), primary_key=True)
+    situation_id: Mapped[str] = mapped_column(String(60), index=True)
+    kind: Mapped[str] = mapped_column(String(30), index=True)          # jam, accident, obstruction, roadworks, lane_management
+    record_type: Mapped[str] = mapped_column(String(60))               # DATEX II class, e.g. AbnormalTraffic
+    subtype: Mapped[str | None] = mapped_column(String(120), nullable=True)   # e.g. queuingTraffic, roadClosed
+    validity_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    start_utc: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    planned_end_utc: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_seen_utc: Mapped[object] = mapped_column(DateTime(timezone=True))
+    last_seen_utc: Mapped[object] = mapped_column(DateTime(timezone=True))
+    gone_utc: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    version_time_utc: Mapped[object | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    direction: Mapped[str | None] = mapped_column(String(20), nullable=True)        # ALERT-C: positive / negative
+    primary_location: Mapped[int | None] = mapped_column(Integer, nullable=True)    # ALERT-C location code, Belgian table 601
+    secondary_location: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queue_length_m: Mapped[int | None] = mapped_column(Integer, nullable=True)      # jams: latest length
+    max_queue_length_m: Mapped[int | None] = mapped_column(Integer, nullable=True)  # jams: longest length seen
+    geometry: Mapped[str | None] = mapped_column(String, nullable=True)  # JSON [[lat, lon], ...] WGS84; jams: at their longest
+    min_lat: Mapped[float | None] = mapped_column(Float, nullable=True)  # bounding box, for matching events to routes
+    min_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+class JamObservation(Base):
+    """A jam as seen in one poll: how long it was and where its two ends were (the feed does not say which is the head)."""
+    __tablename__ = "jam_observations"
+    record_id: Mapped[str] = mapped_column(String(60), primary_key=True)
+    observed_utc: Mapped[object] = mapped_column(DateTime(timezone=True), primary_key=True, index=True)  # feed publication time
+    version: Mapped[int] = mapped_column(Integer)
+    queue_length_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    end1_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    end1_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    end2_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    end2_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+
 class SourceState(Base):
     __tablename__ = "source_state"
     key: Mapped[str] = mapped_column(String(50), primary_key=True)

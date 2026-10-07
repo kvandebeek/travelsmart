@@ -1,0 +1,13 @@
+# Add verified, public-road-access coordinates before collecting live data.
+# Coordinates are [latitude, longitude]. The existing municipal-centre points
+# in locations.yaml are deliberately not used as commute endpoints.
+# Example shape (illustrative only; do not uncomment without verification):
+# home:
+#   diepenbeek: [50.0, 5.0]
+# work:
+#   brussels_european: [50.0, 4.0]
+# validated_routes:
+#   diepenbeek__brussels_european: {road_distance_km: 80.0}
+home: {}
+work: {}
+validated_routes: {}

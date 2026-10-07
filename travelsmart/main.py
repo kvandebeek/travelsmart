@@ -53,6 +53,18 @@ def miv_collect(session) -> dict:
     logging.info("miv poll published=%s %s", snapshot.published.isoformat(), counters)
     return counters
 
+def datex_collect(session) -> dict:
+    """One poll of the events feed: upsert current records, log jam lengths, close records that have ended."""
+    import yaml
+    from travelsmart import datex
+    from travelsmart.verified_fetch import fetch
+    source = yaml.safe_load((ROOT / "config" / "sources.yaml").read_text(encoding="utf-8"))["datex"]
+    snapshot = datex.parse(fetch(source["url"]))
+    counters = datex.ingest(session, snapshot)
+    log = logging.warning if counters["status"] == "stale" else logging.info
+    log("datex poll published=%s %s", snapshot.published.isoformat(), counters)
+    return counters
+
 def miv_probe(out: Path):
     """Fetch the detector feed (config + latest measurements) once and print what it contains."""
     import collections, re, yaml
@@ -72,6 +84,7 @@ def cli():
     collect = sub.add_parser("collect"); collect.add_argument("--journey"); collect.add_argument("--missing", action="store_true", help="Collect only journeys with no stored measurement"); collect.add_argument("--workers", type=int, help="Parallel route requests (default: TRAVELSMART_COLLECT_WORKERS or 8)")
     sub.add_parser("export")
     sub.add_parser("miv-collect", help="Poll the Flemish detector feed once and fold fresh readings into the running statistics")
+    sub.add_parser("datex-collect", help="Poll the Flemish events feed (jams, accidents, roadworks) once and store it")
     probe = sub.add_parser("miv-probe", help="Download the Flemish detector feed once and summarise it"); probe.add_argument("--out", default="data/miv-samples")
     args = parser.parse_args()
     if args.command == "collect":
@@ -89,6 +102,8 @@ def cli():
         logging.info("stored=%s failed=%s", len(rows), len(failed))
     elif args.command == "miv-collect":
         with Session() as session: miv_collect(session)
+    elif args.command == "datex-collect":
+        with Session() as session: datex_collect(session)
     elif args.command == "miv-probe":
         miv_probe(Path(args.out))
     else:

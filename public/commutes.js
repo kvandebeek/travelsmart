@@ -161,7 +161,7 @@ function render() {
   setText('route-title', pairRoutes.length ? pairLabel(pair) : 'Choose a commute');
   setText('route-meta', pairRoutes.length ? `${starts.size} start place${starts.size === 1 ? '' : 's'} (${[...starts].sort().join(', ')}) · ` +
     `${ends.size} employment area${ends.size === 1 ? '' : 's'} (${[...ends].sort().join(', ')}) · ` +
-    `${direction === 'morning' ? 'morning, home → work' : 'evening, work → home'}` : '');
+    `${direction === 'morning' ? 'home → work' : 'work → home'}` : '');
   setText('sample-count', `${good.length} samples`);
   setText('median-time', minutes(median(good.map(row => row.duration_seconds))));
   setText('median-delay', minutes(median(good.map(delay).filter(value => value != null))));

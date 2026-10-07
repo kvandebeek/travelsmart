@@ -44,6 +44,14 @@ areas:
   mons: {name: Mons, region: wallonia}
   tournai: {name: Tournai, region: wallonia}
   wavre: {name: Wavre, region: wallonia}
+  # Business parks along motorways, used only by the random streams (no homes,
+  # no regular commute records). See random_only_destinations below.
+  e313: {name: E313 business parks, region: corridor}
+  a12: {name: A12 business parks, region: corridor}
+  # Business parks along motorways, used only by the random streams (no homes,
+  # no regular commute records). See random_only_destinations below.
+  e313: {name: E313 business parks, region: corridor}
+  a12: {name: A12 business parks, region: corridor}
 
 # Employment areas. `point` = already verified [lat, lon]; otherwise `query` is
 # looked up in OpenStreetMap Nominatim (first hit within 15 km of the town).
@@ -123,6 +131,46 @@ work_places:
     - {id: froyennes, name: Froyennes business area, point: [50.621123, 3.354343]}
     - {id: tournai_ouest, name: Tournai Ouest industrial area, point: [50.6109, 3.3311]}
   wavre: [{id: wavre_nord, name: Wavre-Nord business park, point: [50.734458, 4.590702]}]
+  e313:
+    - {id: wommelgem, name: Wommelgem (Uilenbaan), point: [51.2130, 4.5194]}
+    - {id: herentals, name: Herentals (Klein Gent), point: [51.1626, 4.7780]}
+    - {id: olen, name: Olen (Umicore), point: [51.1822, 4.8928]}
+    - {id: westerlo, name: Westerlo (Industrieweg), point: [51.0898, 4.8297]}
+    - {id: tessenderlo_ham, name: Tessenderlo-Ham industrial area, point: [51.0662, 5.0991]}
+    - {id: lummen_zolder, name: Lummen-Zolder industrial area, point: [50.9928, 5.2404]}
+  a12:
+    - {id: aartselaar, name: Aartselaar (Industrieweg), point: [51.1299, 4.3708]}
+    - {id: boom, name: Boom (Krekelenberg), point: [51.0971, 4.3578]}
+    - {id: willebroek, name: Willebroek (Victor Dumonlaan), point: [51.0744, 4.3649]}
+    - {id: puurs, name: Puurs (Pfizer), point: [51.0669, 4.3097]}
+    - {id: londerzeel, name: Londerzeel Noord, point: [51.0134, 4.3220]}
+  e313:
+    - {id: wommelgem, name: Wommelgem (Uilenbaan), point: [51.2130, 4.5194]}
+    - {id: herentals, name: Herentals (Klein Gent), point: [51.1626, 4.7780]}
+    - {id: olen, name: Olen (Umicore), point: [51.1822, 4.8928]}
+    - {id: westerlo, name: Westerlo (Industrieweg), point: [51.0898, 4.8297]}
+    - {id: tessenderlo_ham, name: Tessenderlo-Ham industrial area, point: [51.0662, 5.0991]}
+    - {id: lummen_zolder, name: Lummen-Zolder industrial area, point: [50.9928, 5.2404]}
+  a12:
+    - {id: aartselaar, name: Aartselaar (Industrieweg), point: [51.1299, 4.3708]}
+    - {id: boom, name: Boom (Krekelenberg), point: [51.0971, 4.3578]}
+    - {id: willebroek, name: Willebroek (Victor Dumonlaan), point: [51.0744, 4.3649]}
+    - {id: puurs, name: Puurs (Pfizer), point: [51.0669, 4.3097]}
+    - {id: londerzeel, name: Londerzeel Noord, point: [51.0134, 4.3220]}
+
+# Towns whose employment areas are only used by the random streams. Each of their
+# business parks is paired with its nearest start places, one per town.
+random_only_destinations:
+  towns: [e313, a12]
+  start_places_per_park: 6
+  maximum_straight_line_km: 80
+
+# Towns whose employment areas are only used by the random streams. Each of their
+# business parks is paired with its nearest start places, one per town.
+random_only_destinations:
+  towns: [e313, a12]
+  start_places_per_park: 6
+  maximum_straight_line_km: 80
 
 # A corridor node is an exact shared road-access point to choose later.
 corridor_nodes:

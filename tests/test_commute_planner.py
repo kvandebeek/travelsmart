@@ -1,7 +1,7 @@
 import json
 import shutil
 from collections import Counter
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -27,7 +27,7 @@ def test_statutory_holidays_and_october_budget():
     assert Counter(poll.tier for poll in polls)["core"] == len(schedule["core_routes"]) * 22 * slots
     for account in schedule["tomtom_accounts"].values():
         assert sum(p.account == account["id"] for p in polls) <= account["monthly_limit"] - account["reserve"]
-    assert {poll.route_id for poll in polls} == {route["id"] for route in routes}
+    assert {poll.route_id for poll in polls} >= {route["id"] for route in routes if route["tier"] != "random"}
     assert all(poll.scheduled_at.weekday() < 5 for poll in polls)
     assert len({(p.route_id, p.scheduled_at) for p in polls}) == len(polls)
     # Every rotating route has one or two measurements per slot during the month.
@@ -86,11 +86,15 @@ def test_missing_account_key_skips_without_borrowing(tmp_path, monkeypatch):
     assert calls == [] and not (tmp_path / "commutes").exists()
 
 
-def test_extra_stream_every_five_minutes_from_the_list():
+def test_peak_extra_stream_draws_from_its_list():
     schedule, routes = load_plan_inputs()
-    polls = plan_month(2026, 10, schedule, routes)
-    extra = [p for p in polls if p.tier == "extra"]
-    config = schedule["extra_routes"]
+    config = schedule["extra_routes"][0]  # the peak stream
+
+    def in_peak(poll):
+        return poll.tier == "extra" and any(time.fromisoformat(s) <= poll.scheduled_at.time() < time.fromisoformat(e)
+                                            for s, e in config["windows"].values())
+
+    extra = [p for p in plan_month(2026, 10, schedule, routes) if in_peak(p)]
     per_day = sum(
         (datetime.strptime(end, "%H:%M") - datetime.strptime(start, "%H:%M")).seconds // 60 // config["every_minutes"]
         + (1 if (datetime.strptime(end, "%H:%M") - datetime.strptime(start, "%H:%M")).seconds // 60 % config["every_minutes"] else 0)
@@ -104,7 +108,7 @@ def test_extra_stream_every_five_minutes_from_the_list():
     assert {p.account for p in extra} == {account}
     assert {p.direction for p in extra if p.scheduled_at.hour < 12} == {"morning"}
     assert len({p.route_id for p in extra}) > len(listed)  # town pairs rotate over their places
-    assert extra == [p for p in plan_month(2026, 10, schedule, routes) if p.tier == "extra"]  # reproducible
+    assert extra == [p for p in plan_month(2026, 10, schedule, routes) if in_peak(p)]  # reproducible
     tick = extra[len(extra) // 3].scheduled_at
     due = due_polls(tick + timedelta(minutes=2), schedule, extra)
     assert [p.scheduled_at for p in due] == [tick]
@@ -135,3 +139,14 @@ def test_workflow_triggers_cover_every_planned_time():
     extra = {p.scheduled_at.strftime("%H:%M") for p in polls if p.tier == "extra"}
     assert regular <= _cron_times("commutes.yml"), sorted(regular - _cron_times("commutes.yml"))
     assert extra <= _cron_times("extra-routes.yml"), sorted(extra - _cron_times("extra-routes.yml"))
+
+
+def test_daytime_stream_draws_from_everything_and_both_directions():
+    schedule, routes = load_plan_inputs()
+    polls = plan_month(2026, 10, schedule, routes)
+    daytime = [p for p in polls if p.tier == "extra" and time(9) <= p.scheduled_at.time() < time(14)]
+    assert len(daytime) == 22 * 60
+    assert {p.direction for p in daytime} == {"morning", "evening"}
+    random_only = {r["id"] for r in routes if r["tier"] == "random"}
+    assert random_only and random_only & {p.route_id for p in daytime}
+    assert not random_only & {p.route_id for p in polls if p.tier in ("core", "rotating")}

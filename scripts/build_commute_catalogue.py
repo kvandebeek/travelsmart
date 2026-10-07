@@ -76,10 +76,12 @@ def select_pairs(catalogue: dict, schedule: dict, homes: dict, works: dict, home
     """Per start place: nearest employment areas plus regional hubs, at most N per town."""
     pairs = {}
     per_town = catalogue["max_work_places_per_town"]
+    random_only = catalogue.get("random_only_destinations") or {}
+    random_towns = set(random_only.get("towns", []))
     for home_id, home in homes.items():
         candidates = sorted(
             (distance_km(home, works[work_id]), work_id) for work_id in works
-            if work_town[work_id] != home_town[home_id]
+            if work_town[work_id] != home_town[home_id] and work_town[work_id] not in random_towns
             and catalogue["candidate_minimum_straight_line_km"] <= distance_km(home, works[work_id])
             <= catalogue["maximum_regular_straight_line_km"])
         chosen: list[str] = []
@@ -117,6 +119,30 @@ def select_pairs(catalogue: dict, schedule: dict, homes: dict, works: dict, home
         if unknown:
             raise ValueError(f"Unknown corridor nodes: {sorted(unknown)}")
         pairs[item["home"], item["work"]] = {"tier": "watchlist", "corridor": ";".join(item.get("corridor", []))}
+
+    # Random-only business parks: nearest start places, one per town.
+    for work_id in (w for w in works if work_town[w] in random_towns):
+        towns_used = set()
+        for distance, home_id in sorted((distance_km(homes[h], works[work_id]), h) for h in homes):
+            if len(towns_used) == random_only["start_places_per_park"]:
+                break
+            if (home_town[home_id] in towns_used or distance > random_only["maximum_straight_line_km"]
+                    or distance < catalogue["candidate_minimum_straight_line_km"]):
+                continue
+            towns_used.add(home_town[home_id])
+            pairs[home_id, work_id] = {"tier": "random", "corridor": ""}
+
+    # Random-only business parks: nearest start places, one per town.
+    for work_id in (w for w in works if work_town[w] in random_towns):
+        towns_used = set()
+        for distance, home_id in sorted((distance_km(homes[h], works[work_id]), h) for h in homes):
+            if len(towns_used) == random_only["start_places_per_park"]:
+                break
+            if (home_town[home_id] in towns_used or distance > random_only["maximum_straight_line_km"]
+                    or distance < catalogue["candidate_minimum_straight_line_km"]):
+                continue
+            towns_used.add(home_town[home_id])
+            pairs[home_id, work_id] = {"tier": "random", "corridor": ""}
 
     # One route per (home town, employment area): several neighbourhoods of one town
     # driving to the same employment area add little. Instead, the town's start places
@@ -162,7 +188,7 @@ def main() -> None:
             homes[home_id], road, metres = snap(client, place["point"])
             notes["home"][home_id] = f"Statbel sector {place['sector']} ({place['sector_name']}) -> {road}, snapped {metres} m"
     for town, places in catalogue["work_places"].items():
-        town_homes = [homes[h] for h in homes if home_town[h] == town]
+        town_homes = [homes[h] for h in homes if home_town[h] == town] or [place["point"] for place in places if "point" in place]
         centre = (sum(p[0] for p in town_homes) / len(town_homes), sum(p[1] for p in town_homes) / len(town_homes))
         for place in places:
             work_id = f"{town}.{place['id']}"

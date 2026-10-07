@@ -11,6 +11,8 @@ on:
       timezone: Europe/Brussels
     - cron: '0-50/10 14-17 * * 1-5'
       timezone: Europe/Brussels
+    - cron: '*/5 9-13 * * 1-5'
+      timezone: Europe/Brussels
 
 permissions:
   contents: write

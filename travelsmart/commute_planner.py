@@ -66,10 +66,11 @@ def load_plan_inputs(config_dir: Path = ROOT / "config", *, active_only: bool = 
     town_pairs = {town_pair(route) for route in routes}
     if set(schedule["core_routes"]) - town_pairs:
         raise ValueError(f"Core town pairs without routes: {sorted(set(schedule['core_routes']) - town_pairs)}")
-    extra = schedule.get("extra_routes") or {}
-    unknown = [entry for entry in extra.get("routes") or [] if entry not in ids and entry not in town_pairs]
-    if unknown:
-        raise ValueError(f"Extra routes not in the catalogue: {unknown}")
+    for stream in extra_streams(schedule):
+        entries = stream.get("routes") or []
+        unknown = [e for e in entries if e != "all" and e not in ids and e not in town_pairs]
+        if unknown:
+            raise ValueError(f"Extra routes not in the catalogue: {unknown}")
     slots = schedule["morning_slots"] + schedule["evening_slots"]
     if len(slots) != len(set(slots)) or slots != sorted(slots):
         raise ValueError("Commute slots must be unique and sorted")
@@ -93,6 +94,12 @@ def load_plan_inputs(config_dir: Path = ROOT / "config", *, active_only: bool = 
     return schedule, routes
 
 
+def extra_streams(schedule: dict) -> list[dict]:
+    """`extra_routes` is one stream or a list of streams."""
+    config = schedule.get("extra_routes") or []
+    return config if isinstance(config, list) else [config]
+
+
 def town_pair(route: dict) -> str:
     """The record a route feeds: every start place and employment area of a town counts towards it."""
     return f"{route['home_area']}__{route['work_area']}"
@@ -113,7 +120,8 @@ def plan_month(year: int, month: int, schedule: dict, routes: list[dict]) -> lis
         variants.setdefault(town_pair(route), []).append(route["id"])
     core = [pair for pair in schedule["core_routes"] if pair in variants]
     core_ids = {route_id for pair in core for route_id in variants[pair]}
-    rotating_pool = sorted(available - core_ids)
+    random_only = {route["id"] for route in routes if route.get("tier") == "random"}
+    rotating_pool = sorted(available - core_ids - random_only)
     polls: list[PlannedPoll] = []
     for direction in ("morning", "evening"):
         slots = schedule[f"{direction}_slots"]
@@ -151,7 +159,8 @@ def plan_month(year: int, month: int, schedule: dict, routes: list[dict]) -> lis
                     second_index = (first_index + max(1, len(days)//2)) % len(days)
                     second_when = datetime.combine(days[second_index], time.fromisoformat(slot), tzinfo=zone)
                     polls.append(PlannedPoll(route_id, direction, "rotating", second_when, account["id"]))
-    polls.extend(_extra_polls(days, schedule, routes, zone, {(p.route_id, p.scheduled_at) for p in polls}))
+    for stream in extra_streams(schedule):
+        polls.extend(_extra_polls(days, stream, schedule, routes, zone, {(p.route_id, p.scheduled_at) for p in polls}))
     for account in schedule["tomtom_accounts"].values():
         used, budget = sum(p.account == account["id"] for p in polls), account["monthly_limit"] - account["reserve"]
         if used > budget:
@@ -160,18 +169,22 @@ def plan_month(year: int, month: int, schedule: dict, routes: list[dict]) -> lis
     return polls
 
 
-def _extra_polls(days: list[date], schedule: dict, routes: list[dict], zone: ZoneInfo,
+def _extra_polls(days: list[date], config: dict, schedule: dict, routes: list[dict], zone: ZoneInfo,
                  taken: set[tuple[str, datetime]]) -> list[PlannedPoll]:
     """One pseudo-random route from the extra list every few minutes during the peaks.
 
     The draw is seeded by date and time, so the plan is reproducible and its cost
     is known in advance. A town pair entry also draws one of its start place x
     employment area routes. A route already planned at that moment is skipped.
+    `routes: [all]` draws from the whole catalogue, random-only destinations included.
+    A window named other than morning/evening draws the direction too.
     """
-    config = schedule.get("extra_routes") or {}
     ids = {route["id"] for route in routes}
+    entries = config.get("routes") or []
+    if entries == ["all"]:
+        entries = sorted(ids)
     options = []
-    for entry in config.get("routes") or []:
+    for entry in entries:
         matches = [entry] if entry in ids else sorted(r["id"] for r in routes if town_pair(r) == entry)
         if matches:
             options.append(matches)
@@ -187,10 +200,12 @@ def _extra_polls(days: list[date], schedule: dict, routes: list[dict], zone: Zon
             while when < stop:
                 seed = int(_stable_rank("extra", when.isoformat())[:12], 16)
                 candidates = [entry[(seed // len(options)) % len(entry)] for entry in options]
+                way = direction if direction in ("morning", "evening") else ("morning", "evening")[seed // 7 % 2]
                 for offset in range(len(candidates)):
                     route_id = candidates[(seed + offset) % len(candidates)]
                     if (route_id, when) not in taken:
-                        polls.append(PlannedPoll(route_id, direction, "extra", when, account))
+                        polls.append(PlannedPoll(route_id, way, "extra", when, account))
+                        taken.add((route_id, when))
                         break
                 when += step
     return polls

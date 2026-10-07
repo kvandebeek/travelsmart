@@ -23,10 +23,11 @@ def test_statutory_holidays_and_october_budget():
     assert date(2026, 10, 8) not in working_days(2026, 10, ["2026-10-08"])
     schedule, routes = load_plan_inputs()
     polls = plan_month(2026, 10, schedule, routes)
-    assert len(polls) == 27984
-    assert Counter(poll.tier for poll in polls) == {"core": 10560, "rotating": 17424}
-    assert Counter(poll.account for poll in polls) == {"tomtom_morning": 17490, "tomtom_evening": 10494}
-    assert len({poll.route_id for poll in polls}) == 446
+    slots = len(schedule["morning_slots"]) + len(schedule["evening_slots"])
+    assert Counter(poll.tier for poll in polls)["core"] == len(schedule["core_routes"]) * 22 * slots
+    for account in schedule["tomtom_accounts"].values():
+        assert sum(p.account == account["id"] for p in polls) <= account["monthly_limit"] - account["reserve"]
+    assert {poll.route_id for poll in polls} == {route["id"] for route in routes}
     assert all(poll.scheduled_at.weekday() < 5 for poll in polls)
     assert len({(p.route_id, p.scheduled_at) for p in polls}) == len(polls)
     # Every rotating route has one or two measurements per slot during the month.
@@ -39,7 +40,7 @@ def test_due_slot_discards_stale_work_and_only_verified_routes_are_active():
     anchors = yaml.safe_load((ROOT / "config" / "commute_anchors.yaml").read_text(encoding="utf-8"))
     assert active
     for route in active:
-        assert route["home_area"] in anchors["home"] and route["work_area"] in anchors["work"]
+        assert route["home_id"] in anchors["home"] and route["work_id"] in anchors["work"]
         assert anchors["validated_routes"][route["id"]]["road_distance_km"] >= 12
     schedule, routes = load_plan_inputs()
     polls = plan_month(2026, 10, schedule, routes)

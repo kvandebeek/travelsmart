@@ -16,12 +16,14 @@
     <section class="metrics" aria-label="Collection summary">
       <article><span>API calls</span><strong id="calls">—</strong></article>
       <article><span>Successful observations</span><strong id="success">—</strong></article>
-      <article><span>Routes covered</span><strong id="covered">—</strong></article>
+      <article><span>Commutes covered</span><strong id="covered">—</strong></article>
       <article><span>Weather matched</span><strong id="weather-count">—</strong></article>
     </section>
     <section class="panel filters" aria-label="Filters">
       <label>Month <select id="month"></select></label>
-      <label>Route <select id="route"></select></label>
+      <label>Commute <select id="route"></select></label>
+      <label>Start place <select id="home-place"></select></label>
+      <label>Employment area <select id="work-place"></select></label>
       <label>Direction <select id="direction"><option value="morning">Morning · home to work</option><option value="evening">Evening · work to home</option></select></label>
       <label>Provider <select id="provider"><option value="all">All providers</option><option value="tomtom">TomTom</option><option value="here">HERE</option></select></label>
       <label>Rain <select id="rain"><option value="all">Any / pending</option><option value="wet">Rain</option><option value="dry">Dry</option><option value="unknown">Weather pending</option></select></label>
@@ -32,7 +34,7 @@
     </section>
     <section class="panel" aria-labelledby="accounts-title"><div class="section-title"><div><p class="eyebrow">This month</p><h2 id="accounts-title">Free allowance used</h2></div></div><div id="account-usage" class="account-usage"></div></section>
     <section class="panel" aria-labelledby="route-title">
-      <div class="section-title"><div><p class="eyebrow">Selected journey</p><h2 id="route-title">Choose a route</h2></div><span id="sample-count" class="chip">0 samples</span></div>
+      <div class="section-title"><div><p class="eyebrow">Selected commute</p><h2 id="route-title">Choose a route</h2></div><span id="sample-count" class="chip">0 samples</span></div>
       <p id="route-meta" class="muted"></p>
       <div class="route-metrics">
         <div><span>Median travel time</span><strong id="median-time">—</strong></div>
@@ -49,7 +51,7 @@
     </section>
     <section class="panel" aria-labelledby="recent-title">
       <div class="section-title"><div><p class="eyebrow">Audit trail</p><h2 id="recent-title">Recent observations</h2></div></div>
-      <div class="table-wrap"><table><thead><tr><th>Observed in Belgium</th><th>Planned slot</th><th>Travel</th><th>Delay</th><th>Weather</th><th>School</th><th>Light</th><th>Road events</th><th>Provider</th><th>Status</th></tr></thead><tbody id="recent"></tbody></table></div>
+      <div class="table-wrap"><table><thead><tr><th>Observed in Belgium</th><th>From → to</th><th>Planned slot</th><th>Travel</th><th>Delay</th><th>Weather</th><th>School</th><th>Light</th><th>Road events</th><th>Provider</th><th>Status</th></tr></thead><tbody id="recent"></tbody></table></div>
     </section>
     <footer>Times are stamped when the API request starts. Weather: <a href="https://open-meteo.com/en/docs/historical-weather-api">Open-Meteo</a>. Flemish road events: © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum.</footer>
   </main>

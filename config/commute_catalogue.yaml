@@ -1,68 +1,139 @@
-# Candidate places, not API-ready coordinates. The reference locations are used
-# only to rank/filter combinations; they must never be sent to a traffic API.
-# Home anchors represent residential neighbourhoods. Work anchors represent
-# employment areas. An operator must select a public-road access point for each.
-minimum_distance_km: 12
-candidate_minimum_straight_line_km: 16
+# Commute catalogue: towns, their employment areas and the rules that pair them
+# with residential start places (config/commute_homes.yaml, from Statbel).
+# scripts/build_commute_catalogue.py geocodes/snaps every point, measures road
+# distances and writes config/commute_routes.csv and config/commute_anchors.yaml.
+minimum_distance_km: 12                 # road distance; shorter routes are dropped
+candidate_minimum_straight_line_km: 16  # pre-filter before asking a router
 maximum_regular_straight_line_km: 125
-nearby_destinations_per_home: 8
-hub_destinations_per_home: 4
-regional_hubs: [antwerp, hasselt, genk, ghent, bruges, kortrijk, leuven, brussels_european, brussels_north, liege, namur, charleroi]
+nearby_work_places_per_home: 8
+hub_work_places_per_home: 4
+max_work_places_per_town: 2             # per start place, so Brussels is not 5 of its 12
+regional_hubs: [antwerp, hasselt, genk, ghent, bruges, kortrijk, leuven, brussels, liege, namur, charleroi]
+
 areas:
-  antwerp: {name: Antwerp, region: antwerp, reference: antwerp, home: Borgerhout, work: Antwerp-Berchem office district}
-  mechelen: {name: Mechelen, region: antwerp, reference: mechelen, home: Nekkerspoel, work: Mechelen-Noord business area}
-  turnhout: {name: Turnhout, region: antwerp, reference: turnhout, home: Schorvoort, work: Veedijk business area}
-  geel: {name: Geel, region: antwerp, reference: geel, home: Elsum, work: Kievermont business area}
-  mol: {name: Mol, region: antwerp, reference_coordinates: [51.184, 5.117], home: Ginderbuiten, work: Berkebossen business area}
+  antwerp: {name: Antwerp, region: antwerp}
+  mechelen: {name: Mechelen, region: antwerp}
+  turnhout: {name: Turnhout, region: antwerp}
+  geel: {name: Geel, region: antwerp}
+  mol: {name: Mol, region: antwerp}
+  diepenbeek: {name: Diepenbeek, region: limburg}
+  hasselt: {name: Hasselt, region: limburg}
+  genk: {name: Genk, region: limburg}
+  beringen: {name: Beringen, region: limburg}
+  lommel: {name: Lommel, region: limburg}
+  maasmechelen: {name: Maasmechelen, region: limburg}
+  kinrooi: {name: Kinrooi, region: limburg}
+  hamont_achel: {name: Hamont-Achel, region: limburg}
+  maaseik: {name: Maaseik, region: limburg}
+  bilzen: {name: Bilzen-Hoeselt, region: limburg}
+  ghent: {name: Ghent, region: east_flanders}
+  aalst: {name: Aalst, region: east_flanders}
+  sint_niklaas: {name: Sint-Niklaas, region: east_flanders}
+  oostende: {name: Oostende, region: west_flanders}
+  bruges: {name: Bruges, region: west_flanders}
+  kortrijk: {name: Kortrijk, region: west_flanders}
+  roeselare: {name: Roeselare, region: west_flanders}
+  ieper: {name: Ieper, region: west_flanders}
+  leuven: {name: Leuven, region: flemish_brabant}
+  vilvoorde: {name: Vilvoorde, region: flemish_brabant}
+  halle: {name: Halle, region: flemish_brabant}
+  brussels: {name: Brussels, region: brussels}
+  liege: {name: Liège, region: wallonia}
+  namur: {name: Namur, region: wallonia}
+  charleroi: {name: Charleroi, region: wallonia}
+  mons: {name: Mons, region: wallonia}
+  tournai: {name: Tournai, region: wallonia}
+  wavre: {name: Wavre, region: wallonia}
 
-  diepenbeek: {name: Diepenbeek, region: limburg, reference: diepenbeek, home: Rooierheide, work: Wetenschapspark Diepenbeek}
-  hasselt: {name: Hasselt, region: limburg, reference: hasselt, home: Kiewit, work: Corda Campus}
-  genk: {name: Genk, region: limburg, reference: genk, home: Winterslag, work: Genk-Zuid industrial area}
-  beringen: {name: Beringen, region: limburg, reference: beringen, home: Koersel, work: Beringen industrial area}
-  lommel: {name: Lommel, region: limburg, reference_coordinates: [51.23, 5.313], home: Heeserbergen, work: Kristalpark}
-  maasmechelen: {name: Maasmechelen, region: limburg, reference: maasmechelen, home: Eisden, work: Maasmechelen industrial area}
-  kinrooi: {name: Kinrooi, region: limburg, reference: kinrooi, home: Kessenich, work: Agropolis}
-  hamont_achel: {name: Hamont-Achel, region: limburg, reference: hamont, home: Achel, work: Hamont industrial area}
-  maaseik: {name: Maaseik, region: limburg, reference_coordinates: [51.097, 5.784], home: Neeroeteren, work: Jagersborg business area}
-  bilzen: {name: Bilzen-Hoeselt, region: limburg, reference: bilzen, home: Merem, work: Spelver business park}
+# Employment areas. `point` = already verified [lat, lon]; otherwise `query` is
+# looked up in OpenStreetMap Nominatim (first hit within 15 km of the town).
+# Bigger towns get 2-3 areas; small towns keep one.
+work_places:
+  antwerp:
+    - {id: berchem_offices, name: Berchem office district, point: [51.199554, 4.432726]}
+    - {id: port, name: Port of Antwerp (Noorderlaan), query: "Noorderlaan, Antwerpen"}
+    - {id: kievit_offices, name: Kievit office district, query: "Kievitplein, Antwerpen"}
+  mechelen:
+    - {id: mechelen_noord, name: Mechelen-Noord business area, point: [51.044008, 4.469786]}
+    - {id: az_sint_maarten, name: AZ Sint-Maarten hospital, query: "AZ Sint-Maarten, Mechelen"}
+  turnhout: [{id: veedijk, name: Veedijk business area, point: [51.29291, 4.929107]}]
+  geel: [{id: kievermont, name: Kievermont business area, point: [51.168587, 5.024826]}]
+  mol: [{id: berkebossen, name: Berkebossen business area, point: [51.203226, 5.162982]}]
+  diepenbeek: [{id: wetenschapspark, name: Wetenschapspark Diepenbeek, point: [50.929207, 5.39048]}]
+  hasselt:
+    - {id: corda_campus, name: Corda Campus, point: [50.953033, 5.354607]}
+    - {id: jessa, name: Jessa hospital, query: "Jessa Ziekenhuis, Salvatorstraat, Hasselt"}
+  genk:
+    - {id: genk_zuid, name: Genk-Zuid industrial area, point: [50.951018, 5.483294]}
+    - {id: thor_park, name: Thor Park, query: "Thor Park, Genk"}
+  beringen: [{id: industrieweg, name: Beringen industrial area, point: [51.052632, 5.179566]}]
+  lommel: [{id: kristalpark, name: Kristalpark, point: [51.203356, 5.251291]}]
+  maasmechelen: [{id: oude_bunders, name: Oude Bunders industrial area, point: [50.946537, 5.700246]}]
+  kinrooi: [{id: agropolis, name: Agropolis, point: [51.138109, 5.818887]}]
+  hamont_achel: [{id: hamont_industrial, name: Hamont industrial area, point: [51.246918, 5.509831]}]
+  maaseik: [{id: jagersborg, name: Jagersborg business area, point: [51.10677, 5.751528]}]
+  bilzen: [{id: spelver, name: Spelver business park, point: [50.869919, 5.529292]}]
+  ghent:
+    - {id: the_loop, name: The Loop, point: [51.02651, 3.689266]}
+    - {id: zwijnaarde, name: Technologiepark Zwijnaarde, query: "Technologiepark, Zwijnaarde"}
+    - {id: port, name: Port of Ghent (Kennedylaan), query: "John Kennedylaan, Gent"}
+  aalst:
+    - {id: erembodegem, name: Erembodegem business area, point: [50.912368, 4.036715]}
+    - {id: olv_hospital, name: OLV hospital (AZORG), point: [50.9431, 4.0557]}
+  sint_niklaas:
+    - {id: europark_zuid, name: Europark-Zuid, point: [51.160215, 4.170648]}
+    - {id: az_nikolaas, name: AZ Nikolaas hospital, point: [51.1623, 4.1531]}
+  oostende:
+    - {id: plassendale, name: Plassendale business park, point: [51.209709, 3.004131]}
+    - {id: airport, name: Ostend-Bruges airport business area, query: "Luchthaven Oostende-Brugge"}
+  bruges:
+    - {id: waggelwater, name: Waggelwater business area, point: [51.216211, 3.19211]}
+    - {id: zeebrugge, name: Port of Zeebrugge, point: [51.3365, 3.2150]}
+  kortrijk:
+    - {id: kennedypark, name: Kennedypark, point: [50.799409, 3.275413]}
+    - {id: az_groeninge, name: AZ Groeninge hospital, query: "AZ Groeninge, President Kennedylaan, Kortrijk"}
+  roeselare:
+    - {id: roeselare_west, name: Roeselare-West business area, point: [50.972471, 3.131138]}
+    - {id: az_delta, name: AZ Delta hospital, query: "AZ Delta, Deltalaan, Roeselare"}
+  ieper: [{id: ieperleekanaal, name: Ieperleekanaal business area, point: [50.878403, 2.885409]}]
+  leuven:
+    - {id: haasrode, name: Haasrode research park, point: [50.846082, 4.722403]}
+    - {id: gasthuisberg, name: UZ Leuven Gasthuisberg, query: "UZ Leuven Gasthuisberg, Herestraat, Leuven"}
+  vilvoorde: [{id: cargovil, name: Cargovil, point: [50.946972, 4.437403]}]
+  halle: [{id: lembeek, name: Lembeek industrial area, point: [50.713456, 4.22302]}]
+  brussels:
+    - {id: central_station, name: Central Station office area, point: [50.8454, 4.3569]}
+    - {id: european_quarter, name: European Quarter, point: [50.842638, 4.383221]}
+    - {id: north_quarter, name: North Quarter, point: [50.860303, 4.360536]}
+    - {id: midi, name: Midi office area, point: [50.835552, 4.337653]}
+    - {id: erasme, name: Erasme business and hospital area, point: [50.813668, 4.264211]}
+  liege:
+    - {id: guillemins, name: Guillemins office area, point: [50.624348, 5.565791]}
+    - {id: sart_tilman, name: Sart-Tilman university and hospital, query: "CHU de Liège, Sart-Tilman"}
+  namur:
+    - {id: ecolys, name: Ecolys business park, point: [50.484996, 4.805756]}
+    - {id: centre, name: Namur station administrative area, point: [50.4686, 4.8627]}
+  charleroi:
+    - {id: aeropole, name: Aéropole, point: [50.473183, 4.465165]}
+    - {id: centre, name: Charleroi-Central office area, point: [50.4047, 4.4387]}
+  mons:
+    - {id: initialis, name: Initialis business park, point: [50.457882, 3.925889]}
+    - {id: ghlin_baudour, name: Ghlin-Baudour industrial area, point: [50.4826, 3.8820]}
+  tournai:
+    - {id: froyennes, name: Froyennes business area, point: [50.621123, 3.354343]}
+    - {id: tournai_ouest, name: Tournai Ouest industrial area, point: [50.6109, 3.3311]}
+  wavre: [{id: wavre_nord, name: Wavre-Nord business park, point: [50.734458, 4.590702]}]
 
-  ghent: {name: Ghent, region: east_flanders, reference: ghent, home: Sint-Amandsberg, work: The Loop}
-  aalst: {name: Aalst, region: east_flanders, reference: aalst, home: Hofstade, work: Erembodegem business area}
-  sint_niklaas: {name: Sint-Niklaas, region: east_flanders, reference: sintniklaas, home: Nieuwkerken-Waas, work: Europark-Zuid}
-
-  oostende: {name: Oostende, region: west_flanders, reference: ostend, home: Stene, work: Plassendale business park}
-  bruges: {name: Bruges, region: west_flanders, reference: bruges, home: Sint-Andries, work: Waggelwater business area}
-  kortrijk: {name: Kortrijk, region: west_flanders, reference: kortrijk, home: Marke, work: Kennedypark}
-  roeselare: {name: Roeselare, region: west_flanders, reference: roeselare, home: Beveren, work: Roeselare-West business area}
-  ieper: {name: Ieper, region: west_flanders, reference_coordinates: [50.851, 2.886], home: Sint-Jan, work: Ieperleekanaal business area}
-
-  leuven: {name: Leuven, region: flemish_brabant, reference: leuven, home: Kessel-Lo, work: Haasrode research park}
-  vilvoorde: {name: Vilvoorde, region: flemish_brabant, reference: vilvoorde, home: Koningslo, work: Cargovil}
-  halle: {name: Halle, region: flemish_brabant, reference: halle, home: Buizingen, work: Lembeek industrial area}
-
-  brussels_centre: {name: Brussels, region: brussels, reference: brussels, home: Dansaert, work: Central Station office area}
-  brussels_european: {name: Brussels, region: brussels, reference: brussels, home: Etterbeek, work: European Quarter}
-  brussels_north: {name: Brussels, region: brussels, reference: brussels, home: Laeken, work: North Quarter}
-  brussels_midi: {name: Brussels, region: brussels, reference: brussels, home: Saint-Gilles, work: Midi office area}
-  brussels_west: {name: Brussels, region: brussels, reference: brussels, home: Scheut, work: Erasme business and hospital area}
-
-  liege: {name: Liège, region: wallonia, reference: liege, home: Grivegnee, work: Guillemins office area}
-  namur: {name: Namur, region: wallonia, reference: namur, home: Jambes, work: Ecolys business park}
-  charleroi: {name: Charleroi, region: wallonia, reference: charleroi, home: Gilly, work: Aeropole}
-  mons: {name: Mons, region: wallonia, reference: mons, home: Nimy, work: Initialis business park}
-  tournai: {name: Tournai, region: wallonia, reference: tournai, home: Kain, work: Froyennes business area}
-  wavre: {name: Wavre, region: wallonia, reference: wavre, home: Limal, work: Wavre-Nord business park}
-
-# A corridor node is an exact shared road-access point to choose later. It is
-# distinct from a home or office anchor in the nearby city.
+# A corridor node is an exact shared road-access point to choose later.
 corridor_nodes:
   brussels_e40: E40 corridor east of Brussels; exact road-access point pending
   leuven_e40: E40 corridor near Leuven; exact road-access point pending
   ghent_e40: E40 corridor near Ghent; exact road-access point pending
 
-# Sparse long journeys worth observing directly as calibration.
+# Sparse long journeys worth observing directly as calibration. Ids are
+# <town>.<place> from commute_homes.yaml and <town>.<id> from work_places.
 long_distance_watchlist:
-  - {home: maaseik, work: oostende, corridor: [brussels_e40]}
-  - {home: maaseik, work: brussels_european, corridor: [leuven_e40]}
-  - {home: brussels_west, work: oostende, corridor: [ghent_e40]}
-  - {home: bilzen, work: brussels_european, corridor: [leuven_e40]}
+  - {home: maaseik.neeroeteren, work: oostende.plassendale, corridor: [brussels_e40]}
+  - {home: maaseik.neeroeteren, work: brussels.european_quarter, corridor: [leuven_e40]}
+  - {home: brussels.anderlecht, work: oostende.plassendale, corridor: [ghent_e40]}
+  - {home: bilzen.hoeselt_centrum, work: brussels.european_quarter, corridor: [leuven_e40]}

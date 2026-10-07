@@ -23,19 +23,21 @@ here_routes_per_slot: 4
 # sector replacement days can be added here as YYYY-MM-DD dates.
 extra_excluded_dates: []
 
-# Proposed priority routes. They become collectable only after their home and
-# work access points and driving distance are validated in commute_anchors.yaml.
+# Priority town pairs, measured in every slot. Each slot uses one of the pair's
+# start place -> employment area routes, rotating over days and slots; all of them
+# feed the same town record. build_commute_catalogue.py makes sure every start
+# place of the home town has a route to the destination town.
 core_routes:
-  - diepenbeek__brussels_european
+  - diepenbeek__brussels
   - diepenbeek__leuven
-  - hasselt__brussels_european
-  - bilzen__brussels_european
+  - hasselt__brussels
+  - bilzen__brussels
   - beringen__leuven
-  - ghent__brussels_north
-  - aalst__brussels_north
-  - mechelen__brussels_european
-  - leuven__brussels_european
-  - antwerp__brussels_north
+  - ghent__brussels
+  - aalst__brussels
+  - mechelen__brussels
+  - leuven__brussels
+  - antwerp__brussels
   - bruges__ghent
   - oostende__bruges
   - kortrijk__ghent
@@ -43,6 +45,6 @@ core_routes:
   - ieper__kortrijk
   - turnhout__antwerp
   - lommel__hasselt
-  - charleroi__brussels_european
-  - namur__brussels_european
-  - genk__brussels_european
+  - charleroi__brussels
+  - namur__brussels
+  - genk__brussels

@@ -123,8 +123,8 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
                                    or here_used_month >= schedule["here_monthly_limit"]):
             break
         route = route_map[poll.route_id]
-        home = anchors["home"][route["home_area"]]
-        work = anchors["work"][route["work_area"]]
+        home = anchors["home"][route["home_id"]]
+        work = anchors["work"][route["work_id"]]
         origin, destination = (home, work) if poll.direction == "morning" else (work, home)
         observed = datetime.now(timezone.utc)
         row = {"provider": provider, "account": account_id, "route_id": poll.route_id, "direction": poll.direction,

@@ -47,9 +47,9 @@ def enrich_day(day: date, *, config_dir: Path = ROOT / "config", data_dir: Path 
         identity = (row["provider"], row.get("account"), row["route_id"], row["observed_at"])
         if identity in existing:
             continue
-        home_area, work_area = row["route_id"].split("__", 1)
-        origin_kind, origin_area = ("home", home_area) if row["direction"] == "morning" else ("work", work_area)
-        dest_kind, dest_area = ("work", work_area) if row["direction"] == "morning" else ("home", home_area)
+        home_id, work_id = row["route_id"].split("__", 1)  # route ids are <home_id>__<work_id>
+        origin_kind, origin_area = ("home", home_id) if row["direction"] == "morning" else ("work", work_id)
+        dest_kind, dest_area = ("work", work_id) if row["direction"] == "morning" else ("home", home_id)
         if origin_area not in anchors[origin_kind] or dest_area not in anchors[dest_kind]:
             continue
         observed = datetime.fromisoformat(row["observed_at"]).astimezone(zone)

@@ -62,9 +62,10 @@ def load_plan_inputs(config_dir: Path = ROOT / "config", *, active_only: bool = 
     if len(ids) != len(routes):
         raise ValueError("Duplicate commute route IDs")
     if len(schedule["core_routes"]) != len(set(schedule["core_routes"])):
-        raise ValueError("Duplicate core route IDs")
-    if set(schedule["core_routes"]) - ids:
-        raise ValueError(f"Unknown core routes: {sorted(set(schedule['core_routes']) - ids)}")
+        raise ValueError("Duplicate core town pairs")
+    town_pairs = {town_pair(route) for route in routes}
+    if set(schedule["core_routes"]) - town_pairs:
+        raise ValueError(f"Core town pairs without routes: {sorted(set(schedule['core_routes']) - town_pairs)}")
     slots = schedule["morning_slots"] + schedule["evening_slots"]
     if len(slots) != len(set(slots)) or slots != sorted(slots):
         raise ValueError("Commute slots must be unique and sorted")
@@ -75,8 +76,8 @@ def load_plan_inputs(config_dir: Path = ROOT / "config", *, active_only: bool = 
         cutoff = yaml.safe_load((config_dir / "commute_catalogue.yaml").read_text(encoding="utf-8"))["minimum_distance_km"]
         approved = set()
         for route in routes:
-            home = anchors["home"].get(route["home_area"])
-            work = anchors["work"].get(route["work_area"])
+            home = anchors["home"].get(route["home_id"])
+            work = anchors["work"].get(route["work_id"])
             validation = anchors["validated_routes"].get(route["id"], {})
             if home is None or work is None or validation.get("road_distance_km", 0) < cutoff:
                 continue
@@ -88,6 +89,11 @@ def load_plan_inputs(config_dir: Path = ROOT / "config", *, active_only: bool = 
     return schedule, routes
 
 
+def town_pair(route: dict) -> str:
+    """The record a route feeds: every start place and employment area of a town counts towards it."""
+    return f"{route['home_area']}__{route['work_area']}"
+
+
 def _stable_rank(*parts: str) -> str:
     return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
 
@@ -96,8 +102,14 @@ def plan_month(year: int, month: int, schedule: dict, routes: list[dict]) -> lis
     days = working_days(year, month, schedule.get("extra_excluded_dates", []))
     zone = ZoneInfo(schedule["timezone"])
     available = {route["id"] for route in routes}
-    core = [route_id for route_id in schedule["core_routes"] if route_id in available]
-    rotating_pool = sorted(available - set(core))
+    # Core town pairs are measured in every slot. Each slot uses one of the pair's
+    # place-to-place routes, rotating so the town record is built from all of them.
+    variants: dict[str, list[str]] = {}
+    for route in routes:
+        variants.setdefault(town_pair(route), []).append(route["id"])
+    core = [pair for pair in schedule["core_routes"] if pair in variants]
+    core_ids = {route_id for pair in core for route_id in variants[pair]}
+    rotating_pool = sorted(available - core_ids)
     polls: list[PlannedPoll] = []
     for direction in ("morning", "evening"):
         slots = schedule[f"{direction}_slots"]
@@ -108,17 +120,20 @@ def plan_month(year: int, month: int, schedule: dict, routes: list[dict]) -> lis
             raise ValueError(f"{account['id']} core routes require {core_cost} calls; budget is {budget}")
         capacity = (budget - core_cost) // len(slots)
         first_count = min(capacity, len(rotating_pool))
-        # If the catalogue outgrows the account, advance the first-sweep
-        # cohort between months. The current 446-route catalogue fits.
+        # When the catalogue outgrows the account, advance the first-sweep
+        # cohort between months so every route is reached over time.
         first_offset = ((year * 12 + month) - (2026 * 12 + 10)) * first_count
         first = [rotating_pool[(first_offset + i) % len(rotating_pool)] for i in range(first_count)] if rotating_pool else []
         extra_count = min(schedule["extra_rotating_routes_per_month"], capacity - first_count, first_count)
         extra_offset = ((year * 12 + month) - (2026 * 12 + 10)) * extra_count
         extra = {first[(extra_offset + i) % len(first)] for i in range(extra_count)} if first else set()
-        for day in days:
-            for slot in slots:
+        for day_index, day in enumerate(days):
+            for slot_index, slot in enumerate(slots):
                 when = datetime.combine(day, time.fromisoformat(slot), tzinfo=zone)
-                polls.extend(PlannedPoll(route_id, direction, "core", when, account["id"]) for route_id in core)
+                for pair in core:
+                    options = sorted(variants[pair])
+                    choice = (day_index * len(slots) + slot_index + int(_stable_rank(pair)[:4], 16)) % len(options)
+                    polls.append(PlannedPoll(options[choice], direction, "core", when, account["id"]))
         for slot in slots:
             # A rotating route is seen once per slot, with a second observation
             # for the extra cohort on a different day. Day order is stable.

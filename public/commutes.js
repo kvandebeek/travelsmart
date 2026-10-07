@@ -1,5 +1,5 @@
 const $ = id => document.getElementById(id);
-const state = {index: null, observations: []};
+const state = {index: null, observations: [], routes: new Map()};
 const fmt = new Intl.DateTimeFormat('en-BE', {timeZone:'Europe/Brussels', dateStyle:'medium', timeStyle:'short'});
 const num = n => Number(n || 0).toLocaleString('en-BE');
 const minutes = seconds => seconds == null ? '—' : `${(seconds / 60).toFixed(1)} min`;
@@ -11,21 +11,32 @@ const eventState = row => { if (!row.traffic_events) return 'unknown'; return Ob
 
 function option(select, value, label) { const el = document.createElement('option'); el.value = value; el.textContent = label; select.append(el); }
 const town = area => state.index.areas?.[area]?.name || area;
-const routeLabel = route => `${town(route.home_area)} → ${town(route.work_area)} (${route.work_place})`;
+// A commute record is a town pair. Every start place in the home town and every
+// employment area in the destination town feeds the same record.
+const pairOf = route => `${route.home_area}__${route.work_area}`;
+const pairLabel = pair => { const [home, work] = pair.split('__'); return `${town(home)} → ${town(work)}`; };
+const routeOf = row => state.routes.get(row.route_id);
 
-// One group per home town; the group label names the residential neighbourhood.
-function fillRoutes(select) {
+function fillPairs(select) {
   const groups = new Map();
-  for (const route of state.index.routes) {
-    const label = `${town(route.home_area)} · from ${route.home_place}`;
+  for (const pair of new Set(state.index.routes.map(pairOf))) {
+    const label = town(pair.split('__')[0]);
     if (!groups.has(label)) groups.set(label, []);
-    groups.get(label).push(route);
+    groups.get(label).push(pair);
   }
   for (const label of [...groups.keys()].sort((a, b) => a.localeCompare(b))) {
     const group = document.createElement('optgroup'); group.label = label;
-    groups.get(label).sort((a, b) => routeLabel(a).localeCompare(routeLabel(b)))
-      .forEach(route => option(group, route.id, routeLabel(route)));
+    groups.get(label).sort((a, b) => pairLabel(a).localeCompare(pairLabel(b))).forEach(pair => option(group, pair, pairLabel(pair)));
     select.append(group);
+  }
+}
+
+// Optional drill-down within a town pair: one start place and/or one employment area.
+function fillPlaces() {
+  const routes = state.index.routes.filter(route => pairOf(route) === $('route').value);
+  for (const [id, field, all] of [['home-place', 'home_place', 'All start places'], ['work-place', 'work_place', 'All employment areas']]) {
+    const select = $(id); select.replaceChildren(); option(select, 'all', all);
+    [...new Set(routes.map(route => route[field]))].sort((a, b) => a.localeCompare(b)).forEach(name => option(select, name, name));
   }
 }
 function setText(id, value) { $(id).textContent = value; }
@@ -36,9 +47,11 @@ async function loadMonth() {
   const response = await fetch(`data/commutes/${month}.json`);
   if (!response.ok) throw new Error(`Could not load ${month}`);
   state.observations = await response.json();
-  const observedRoutes = new Set(state.observations.map(row => row.route_id));
-  if (!$('route').value || !observedRoutes.has($('route').value)) {
-    $('route').value = observedRoutes.has('diepenbeek__brussels_european') ? 'diepenbeek__brussels_european' : [...observedRoutes].sort()[0] || '';
+  const observedPairs = new Set(state.observations.map(routeOf).filter(Boolean).map(pairOf));
+  if (!$('route').value || !observedPairs.has($('route').value)) {
+    const preferred = 'diepenbeek__brussels';
+    $('route').value = observedPairs.has(preferred) ? preferred : [...observedPairs].sort()[0] || preferred;
+    fillPlaces();
   }
   render();
 }
@@ -99,21 +112,26 @@ function renderTable(rows) {
   for (const row of [...rows].sort((a,b)=>b.observed_at.localeCompare(a.observed_at)).slice(0,30)) {
     const tr = document.createElement('tr');
     const school = row.calendar ? `${row.calendar.flanders_school_day ? 'FL school' : 'FL break'} / ${row.calendar.fwb_school_day == null ? 'FWB ?' : row.calendar.fwb_school_day ? 'FWB school' : 'FWB break'}` : '—';
-    const cells = [fmt.format(new Date(row.observed_at)), slot(row), minutes(row.duration_seconds), minutes(delay(row)),
+    const route = routeOf(row), journey = row.direction === 'morning'
+      ? `${route?.home_place} → ${route?.work_place}` : `${route?.work_place} → ${route?.home_place}`;
+    const cells = [fmt.format(new Date(row.observed_at)), journey, slot(row), minutes(row.duration_seconds), minutes(delay(row)),
       wet(row) === null ? 'Pending' : wet(row) ? 'Rain' : 'Dry', school, row.calendar?.origin_light || '—',
       eventState(row), row.provider === 'here' ? 'HERE' : 'TomTom', row.status];
     for (const value of cells) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
     body.append(tr);
   }
-  if (!body.children.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 10; td.textContent = 'No observations yet.'; tr.append(td); body.append(tr); }
+  if (!body.children.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 11; td.textContent = 'No observations yet.'; tr.append(td); body.append(tr); }
 }
 
 function render() {
-  const all = state.observations, routeId = $('route').value, direction = $('direction').value, provider = $('provider').value;
-  const route = state.index.routes.find(item => item.id === routeId);
+  const all = state.observations, pair = $('route').value, direction = $('direction').value, provider = $('provider').value;
+  const homePlace = $('home-place').value, workPlace = $('work-place').value;
+  const pairRoutes = state.index.routes.filter(route => pairOf(route) === pair);
   const rain = $('rain').value, school = $('school').value;
   const light = $('light').value, events = $('events').value, weekday = $('weekday').value;
-  const base = all.filter(row => row.route_id === routeId && row.direction === direction &&
+  const base = all.filter(row => { const route = routeOf(row);
+    return route && pairOf(route) === pair && row.direction === direction &&
+    (homePlace === 'all' || route.home_place === homePlace) && (workPlace === 'all' || route.work_place === workPlace) &&
     (provider === 'all' || row.provider === provider) &&
     (weekday === 'all' || String(row.calendar?.weekday) === weekday) &&
     (light === 'all' || row.calendar?.origin_light === light) &&
@@ -121,12 +139,12 @@ function render() {
     (school === 'all' || (school === 'flanders_school' && row.calendar?.flanders_school_day === true) ||
       (school === 'flanders_break' && row.calendar?.flanders_school_day === false) ||
       (school === 'fwb_school' && row.calendar?.fwb_school_day === true) ||
-      (school === 'fwb_break' && row.calendar?.fwb_school_day === false)));
+      (school === 'fwb_break' && row.calendar?.fwb_school_day === false)); });
   const selected = base.filter(row => rain === 'all' || (rain === 'wet' && wet(row) === true) ||
     (rain === 'dry' && wet(row) === false) || (rain === 'unknown' && wet(row) === null));
   const good = selected.filter(row => row.status === 'ok');
   setText('calls', num(all.length)); setText('success', num(all.filter(row => row.status === 'ok').length));
-  setText('covered', num(new Set(all.filter(row => row.status === 'ok').map(row => row.route_id)).size));
+  setText('covered', num(new Set(all.filter(row => row.status === 'ok').map(routeOf).filter(Boolean).map(pairOf)).size));
   setText('weather-count', num(all.filter(row => row.weather).length));
   const usage = $('account-usage'); usage.replaceChildren();
   const used = state.index.months.find(item => item.month === $('month').value)?.allowance_used_percent || {};
@@ -137,8 +155,11 @@ function render() {
     name.textContent = label; value.textContent = `${share.toLocaleString('en-BE', {maximumFractionDigits: 1})}%`;
     card.append(name,value,bar); usage.append(card);
   }
-  setText('route-title', route ? `${town(route.home_area)} ↔ ${town(route.work_area)}` : 'Choose a route');
-  setText('route-meta', route ? `Home: ${route.home_place}, ${town(route.home_area)} · Work: ${route.work_place}, ${town(route.work_area)} · ${direction === 'morning' ? 'morning, home → work' : 'evening, work → home'}` : '');
+  const starts = new Set(pairRoutes.map(route => route.home_place)), ends = new Set(pairRoutes.map(route => route.work_place));
+  setText('route-title', pairRoutes.length ? pairLabel(pair) : 'Choose a commute');
+  setText('route-meta', pairRoutes.length ? `${starts.size} start place${starts.size === 1 ? '' : 's'} (${[...starts].sort().join(', ')}) · ` +
+    `${ends.size} employment area${ends.size === 1 ? '' : 's'} (${[...ends].sort().join(', ')}) · ` +
+    `${direction === 'morning' ? 'morning, home → work' : 'evening, work → home'}` : '');
   setText('sample-count', `${good.length} samples`);
   setText('median-time', minutes(median(good.map(row => row.duration_seconds))));
   setText('median-delay', minutes(median(good.map(delay).filter(value => value != null))));
@@ -153,8 +174,10 @@ async function start() {
     if (!response.ok) throw new Error('Dashboard data has not been exported yet.');
     state.index = await response.json();
     state.index.months.slice().reverse().forEach(item => option($('month'), item.month, item.month));
-    fillRoutes($('route'));
-    ['route','direction','provider','rain','school','light','events','weekday'].forEach(id => $(id).addEventListener('change', render));
+    state.routes = new Map(state.index.routes.map(route => [route.id, route]));
+    fillPairs($('route')); fillPlaces();
+    $('route').addEventListener('change', () => { fillPlaces(); render(); });
+    ['home-place','work-place','direction','provider','rain','school','light','events','weekday'].forEach(id => $(id).addEventListener('change', render));
     $('month').addEventListener('change', () => loadMonth().catch(showError));
     await loadMonth();
   } catch (error) { showError(error); }

@@ -5,23 +5,11 @@ on:
     branches: [master, main]
   workflow_dispatch:
   schedule:
-    # Must cover every slot in config/commute_schedule.yaml (checked by the tests).
-    - cron: '0,30 5,6 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '50 6 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '10,25,40,55 7 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '10,25,40 8 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '0 9 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '30 14 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '0,30 15-17 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '10 12 * * *'
-      timezone: Europe/Brussels
+    # UTC on purpose: the planner works in Brussels time (summer and winter time),
+    # so a run with no slot due exits without API calls. 03:00-16:55 UTC covers
+    # 05:00-17:30 Brussels in both CET and CEST. Must cover every slot (tests check).
+    - cron: '*/5 3-16 * * 1-5'
+    - cron: '10 10 * * *'   # daily weather join
 
 permissions:
   contents: write
@@ -57,18 +45,18 @@ jobs:
             if [ -n "${!name}" ]; then echo "::notice::$name is set"; else echo "::warning::$name is missing"; fi
           done
       - name: Collect a due commute slot
-        if: github.event_name != 'push' && github.event.schedule != '10 12 * * *'
+        if: github.event_name != 'push' && github.event.schedule != '10 10 * * *'
         env:
           TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
           TOMTOM_API_KEY2: ${{ secrets.TOMTOM_API_KEY2 }}
         run: python scripts/run_commute_tick.py --execute
       - name: Collect a small HERE comparison sample
-        if: github.event_name != 'push' && github.event.schedule != '10 12 * * *'
+        if: github.event_name != 'push' && github.event.schedule != '10 10 * * *'
         env:
           HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
         run: python scripts/run_commute_tick.py --provider here --execute
       - name: Add historical weather to completed observations
-        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '10 12 * * *'
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '10 10 * * *'
         run: python scripts/enrich_commute_weather.py
       - name: Commit observation files
         id: commit

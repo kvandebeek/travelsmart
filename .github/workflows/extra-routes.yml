@@ -6,13 +6,8 @@ name: Extra route stream
 on:
   workflow_dispatch:
   schedule:
-    # Must cover every extra tick in config/commute_schedule.yaml (checked by the tests).
-    - cron: '5-55/10 5-8 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '0-50/10 14-17 * * 1-5'
-      timezone: Europe/Brussels
-    - cron: '*/5 9-13 * * 1-5'
-      timezone: Europe/Brussels
+    # UTC on purpose (see commutes.yml): runs with nothing due exit without API calls.
+    - cron: '*/5 3-16 * * 1-5'
 
 permissions:
   contents: write

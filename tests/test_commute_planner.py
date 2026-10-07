@@ -127,18 +127,25 @@ def _cron_times(workflow: str) -> set[str]:
     config = yaml.safe_load((ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8"))
     times = set()
     for entry in config[True]["schedule"]:  # YAML 1.1 reads the key `on` as True
+        assert "timezone" not in entry, "schedules are plain UTC"
         minute, hour, *_ = entry["cron"].split()
         times |= {f"{h:02d}:{m:02d}" for h in _cron_values(hour, 0, 23) for m in _cron_values(minute, 0, 59)}
     return times
 
 
 def test_workflow_triggers_cover_every_planned_time():
+    """Crons are UTC; every Brussels time must be covered in winter (UTC+1) and summer (UTC+2)."""
     schedule, routes = load_plan_inputs()
     polls = plan_month(2026, 10, schedule, routes)
-    regular = {p.scheduled_at.strftime("%H:%M") for p in polls if p.tier != "extra"}
-    extra = {p.scheduled_at.strftime("%H:%M") for p in polls if p.tier == "extra"}
-    assert regular <= _cron_times("commutes.yml"), sorted(regular - _cron_times("commutes.yml"))
-    assert extra <= _cron_times("extra-routes.yml"), sorted(extra - _cron_times("extra-routes.yml"))
+
+    def utc(hhmm: str, offset: int) -> str:
+        hour, minute = map(int, hhmm.split(":"))
+        return f"{(hour - offset) % 24:02d}:{minute:02d}"
+
+    for workflow, tiers in (("commutes.yml", {"core", "rotating"}), ("extra-routes.yml", {"extra"})):
+        planned = {p.scheduled_at.strftime("%H:%M") for p in polls if p.tier in tiers}
+        missing = sorted(f"{t}+{o}" for t in planned for o in (1, 2) if utc(t, o) not in _cron_times(workflow))
+        assert not missing, (workflow, missing)
 
 
 def test_daytime_stream_draws_from_everything_and_both_directions():

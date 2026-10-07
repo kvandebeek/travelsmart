@@ -37,10 +37,10 @@
           <strong id="time-label">—</strong>
           <button id="play" type="button" aria-pressed="false">▶ Play the day</button>
         </div>
-        <input id="time" type="range" min="0" max="0" step="1" value="0" aria-label="Departure time">
+        <input id="time" type="range" min="0" max="0" step="any" value="0" aria-label="Departure time">
         <div class="ticks" id="ticks" aria-hidden="true"></div>
         <div class="strip" id="strip" hidden>
-          <div class="strip-cells" id="strip-cells" role="group" aria-label="Whole day for this trip"></div>
+          <div class="strip-bar" id="strip-bar" role="img" aria-label="Whole day for this trip, as a colour gradient"><span class="strip-marker" id="strip-marker"></span></div>
           <p class="strip-note" id="strip-note"></p>
         </div>
       </div>
@@ -48,7 +48,7 @@
 
     <section class="panel map-panel">
       <div id="map" role="img" aria-label="Map of destinations coloured by how busy the trip usually is"></div>
-      <ul class="legend" id="legend" aria-label="Legend"></ul>
+      <div class="legend" id="legend" aria-label="Legend"></div>
     </section>
 
     <section class="panel" aria-labelledby="list-title">

@@ -49,9 +49,9 @@ h2 { font-size: 1.35rem; letter-spacing: -.02em; margin: 2px 0; }
 [hidden] { display: none !important; }
 .controls label.start { display: grid; gap: 6px; color: var(--muted); font-weight: 650; font-size: .85rem; }
 .strip { margin-top: 12px; }
-.strip-cells { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; }
-.strip-cells button { height: 26px; border: 0; border-radius: 4px; padding: 0; cursor: pointer; outline-offset: 2px; }
-.strip-cells button[aria-current="true"] { outline: 2px solid var(--ink); }
+.strip-bar { position: relative; height: 26px; border-radius: 6px; cursor: pointer; }
+.strip-marker { position: absolute; top: -4px; bottom: -4px; width: 4px; border-radius: 2px; background: var(--ink);
+  box-shadow: 0 0 0 2px var(--surface); transform: translateX(-50%); pointer-events: none; }
 .strip-note { color: var(--muted); font-size: .85rem; margin: 8px 0 0; }
 select { width: 100%; min-width: 0; text-overflow: ellipsis; font: inherit; font-weight: 650; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; }
 .time-head { display: flex; align-items: baseline; gap: 10px; color: var(--muted); font-weight: 650; font-size: .85rem; }
@@ -62,8 +62,14 @@ input[type=range] { width: 100%; accent-color: var(--accent); margin: 10px 0 2px
 
 .map-panel { padding: 0; overflow: hidden; }
 #map { height: min(62vh, 600px); min-height: 360px; background: var(--page); }
-.legend { display: flex; flex-wrap: wrap; gap: 8px 18px; list-style: none; margin: 0; padding: 12px 18px; border-top: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
-.legend li { display: flex; align-items: center; gap: 7px; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 0; padding: 12px 18px; border-top: 1px solid var(--line); font-size: .85rem; color: var(--muted); }
+.legend-item { display: flex; align-items: center; gap: 7px; }
+.legend-scale { display: grid; gap: 4px; flex: 1 1 320px; max-width: 520px; }
+.legend-bar { height: 10px; border-radius: 5px; }
+.legend-labels { position: relative; height: 1.1em; font-size: .75rem; }
+.legend-labels span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.legend-labels span.first { transform: none; }
+.legend-labels span.last { transform: translateX(-100%); }
 .swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px var(--surface); }
 
 .table-wrap { overflow: auto; }

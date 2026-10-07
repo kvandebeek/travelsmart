@@ -78,7 +78,7 @@ flowchart LR
     F --> I["📊 GitHub Pages<br/>dashboard"]
 ```
 
-1. **Morning and evening peaks.** Departures every 15–20 minutes from 05:00 to 09:00, and every 30 minutes from 14:00 to 18:00, on Belgian working days. Public holidays are skipped automatically.
+1. **Morning and evening peaks.** Departures from 05:00 to 09:00 (every 15–30 minutes, densest around the rush hour) and every 30 minutes from 14:30 to 17:30, on Belgian working days. Public holidays are skipped automatically.
 2. **Priority commutes in every slot.** Twenty key commutes, such as Diepenbeek, Hasselt, Ghent, Antwerp and Leuven to Brussels, are measured at every departure time on every working day.
 3. **Everything else in rotation.** All other commutes are spread over the month so each one builds up a full departure-time profile.
 4. **A close-up of favourite commutes.** A short hand-picked list gets extra measurements every few minutes during the peaks, picked at random from the list, for a fine-grained view of the best moment to leave.

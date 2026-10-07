@@ -41,6 +41,11 @@ extra_routes:
     windows: {daytime: ["09:00", "14:00"]}
     routes: [all]
 
+# Motorway corridors (config/commute_corridors.yaml): one TomTom call per corridor and
+# direction at every regular slot; the legs give estimates for every pair along the way.
+corridors:
+  measure: [liege_ghent, e314]
+
 # Only the ten national statutory dates are computed automatically. Company or
 # sector replacement days can be added here as YYYY-MM-DD dates.
 extra_excluded_dates: []

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
@@ -19,7 +20,7 @@ from travelsmart.config import ROOT
 class PlannedPoll:
     route_id: str
     direction: str  # morning: home -> work; evening: work -> home
-    tier: str       # core, rotating or extra
+    tier: str       # core, rotating, extra or corridor
     scheduled_at: datetime
     account: str
 
@@ -71,6 +72,14 @@ def load_plan_inputs(config_dir: Path = ROOT / "config", *, active_only: bool = 
         unknown = [e for e in entries if e != "all" and e not in ids and e not in town_pairs]
         if unknown:
             raise ValueError(f"Extra routes not in the catalogue: {unknown}")
+    # Motorway corridors (scripts/build_corridors via travelsmart.commute_corridors): measured at
+    # every regular slot in both directions when listed in the schedule.
+    nodes_file = config_dir / "commute_corridor_nodes.json"
+    wanted = (schedule.get("corridors") or {}).get("measure", [])
+    known = json.loads(nodes_file.read_text(encoding="utf-8")) if wanted and nodes_file.exists() else {}
+    if set(wanted) - set(known):
+        raise ValueError(f"Corridors without points: {sorted(set(wanted) - set(known))}")
+    schedule["_corridors"] = [corridor for corridor in wanted if corridor in known]
     slots = schedule["morning_slots"] + schedule["evening_slots"]
     if len(slots) != len(set(slots)) or slots != sorted(slots):
         raise ValueError("Commute slots must be unique and sorted")
@@ -159,6 +168,13 @@ def plan_month(year: int, month: int, schedule: dict, routes: list[dict]) -> lis
                     second_index = (first_index + max(1, len(days)//2)) % len(days)
                     second_when = datetime.combine(days[second_index], time.fromisoformat(slot), tzinfo=zone)
                     polls.append(PlannedPoll(route_id, direction, "rotating", second_when, account["id"]))
+    for direction in ("morning", "evening"):
+        account = schedule["tomtom_accounts"][direction]["id"]
+        for day in days:
+            for slot in schedule[f"{direction}_slots"]:
+                when = datetime.combine(day, time.fromisoformat(slot), tzinfo=zone)
+                polls.extend(PlannedPoll(f"corridor:{corridor}:{way}", direction, "corridor", when, account)
+                             for corridor in schedule.get("_corridors", []) for way in ("forward", "reverse"))
     for stream in extra_streams(schedule):
         polls.extend(_extra_polls(days, stream, schedule, routes, zone, {(p.route_id, p.scheduled_at) for p in polls}))
     for account in schedule["tomtom_accounts"].values():

@@ -13,6 +13,7 @@ import httpx
 import yaml
 
 from travelsmart.commute_context import calendar_context, event_context, fetch_datex_snapshot
+from travelsmart.commute_corridors import measure as measure_corridor
 from travelsmart.commute_planner import PlannedPoll, due_polls, load_plan_inputs, plan_month
 from travelsmart.config import ROOT
 
@@ -87,6 +88,7 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
                if (poll.tier == "extra") == (stream == "extra")]
     polls = due_polls(now, schedule, planned)
     if provider == "here":
+        polls = [poll for poll in polls if poll.tier != "corridor"]   # corridors are TomTom only
         polls = sorted(polls, key=lambda poll: hashlib.sha256(
             f"here|{poll.scheduled_at.isoformat()}|{poll.route_id}".encode()).hexdigest())[:schedule["here_routes_per_slot"]]
     if not polls or not execute:
@@ -117,6 +119,13 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
                           datetime.fromisoformat(row["observed_at"]).astimezone(ZoneInfo(schedule["timezone"])).date() == local.date()
                           for row in existing)
     here_used_month = sum(row["provider"] == "here" for row in existing)  # one file per month
+    # Corridor calls are TomTom calls too: they count towards the same account budgets.
+    corridor_rows = read_observations(data_dir / "corridors" / f"{local:%Y-%m}.jsonl")
+    for row in corridor_rows:
+        if row.get("account") in monthly_used:
+            monthly_used[row["account"]] += 1
+    completed |= {("tomtom", row.get("account"), f"corridor:{row['corridor']}:{row['direction']}", row.get("scheduled_at"))
+                  for row in corridor_rows}
     attempts = stored = 0
     for poll in polls:
         account_id = poll.account if provider == "tomtom" else "here"
@@ -130,6 +139,15 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
         if provider == "here" and (here_used_today >= schedule["here_daily_limit"]
                                    or here_used_month >= schedule["here_monthly_limit"]):
             break
+        if poll.tier == "corridor":
+            _, corridor, way = poll.route_id.split(":")
+            attempts += 1
+            monthly_used[account_id] += 1
+            row = measure_corridor(corridor, way, os.environ[accounts[account_id]["key_env"]], account_id,
+                                   scheduled_at=poll.scheduled_at.isoformat(), config_dir=config_dir, data_dir=data_dir)
+            stored += row["status"] == "ok"
+            completed.add(identity)
+            continue
         route = route_map[poll.route_id]
         home = anchors["home"][route["home_id"]]
         work = anchors["work"][route["work_id"]]

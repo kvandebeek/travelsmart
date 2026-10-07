@@ -194,3 +194,16 @@ def test_map_summary_uses_both_directions():
     assert data["stats"]["diepenbeek"]["brussels"]["07:00"] == [3, 0.3, 65]   # 3900 s: 30% over 3000 s, 65 min
     assert data["stats"]["brussels"]["diepenbeek"]["17:00"] == [1, 0.1, 55]   # evening runs work -> home
     assert "brussels" in data["destinations"]["diepenbeek"] and "diepenbeek" in data["destinations"]["brussels"]
+
+
+def test_corridors_every_regular_slot_both_directions_within_budget():
+    schedule, routes = load_plan_inputs()
+    polls = plan_month(2026, 10, schedule, routes)
+    corridor = [p for p in polls if p.tier == "corridor"]
+    slots = len(schedule["morning_slots"]) + len(schedule["evening_slots"])
+    assert len(corridor) == 22 * slots * len(schedule["corridors"]["measure"]) * 2
+    assert {p.route_id.split(":")[2] for p in corridor} == {"forward", "reverse"}
+    regular_times = {p.scheduled_at for p in polls if p.tier == "core"}
+    assert {p.scheduled_at for p in corridor} == regular_times      # same moments as the regular slots
+    for account in schedule["tomtom_accounts"].values():
+        assert sum(p.account == account["id"] for p in polls) <= account["monthly_limit"] - account["reserve"]

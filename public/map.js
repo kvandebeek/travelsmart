@@ -8,7 +8,7 @@
 const $ = id => document.getElementById(id);
 const DEMO = new URLSearchParams(location.search).has('demo');
 const MINUTES_PER_BUCKET = 30;
-const state = {data: null, mode: 'from', origin: null, target: '', arrive: null, t: 0, trips: [], anchor: null,
+const state = {data: null, mode: 'from', origin: null, target: '', arrive: null, t: 0, trips: [], anchor: null, coverage: null,
                playing: false, tween: null, roads: {}, demo: {}};
 
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -183,6 +183,7 @@ function build() {
     state.trips.push({from, to, other, line, hit, dot});
   }
   const anchorKey = state.mode === 'from' ? state.origin : state.arrive;
+  renderCoverage();
   state.anchor = L.circleMarker(place(anchorKey).point, {radius: 10, color: css('--ring'), weight: 3, fillColor: css('--you'), fillOpacity: 1})
     .bindTooltip(`${state.mode === 'from' ? 'Start' : 'Destination'}: ${place(anchorKey).name}`,
                  {permanent: true, direction: 'right', offset: [10, 0], className: 'trip'}).addTo(map);
@@ -207,6 +208,49 @@ function recolor() {
   }
   renderList(rows, time);
   renderStrip();
+  renderCoverageNote();
+}
+
+// --- data coverage along the timeline -------------------------------------------------------
+// Per half hour, for the trips currently on the map: how many have enough data, and how many
+// measurements there are in total. Uses the measured half hours themselves, not blended values.
+function coverage() {
+  return state.data.buckets.map(bucket => {
+    let judged = 0, measured = 0, measurements = 0;
+    for (const trip of state.trips) {
+      const entry = statsFrom(trip.from)[trip.to]?.[bucket];
+      if (!entry) continue;
+      measured += 1;
+      measurements += entry[0];
+      if (entry[0] >= state.data.min_samples) judged += 1;
+    }
+    return {bucket, judged, measured, measurements, trips: state.trips.length};
+  });
+}
+function renderCoverage() {
+  const bars = coverage(), last = bars.length - 1, box = $('coverage');
+  state.coverage = bars;
+  box.replaceChildren(...bars.map((bar, index) => {
+    const span = document.createElement('span');
+    // Height: share of trips with any measurement here. Darkness: is it enough (and how solid)?
+    const share = bar.trips ? bar.measured / bar.trips : 0;
+    const perTrip = bar.measured ? bar.measurements / bar.measured : 0;
+    span.className = !bar.measurements ? 'none' : bar.judged < bar.measured / 2 ? 'thin' : perTrip >= 10 ? 'good' : 'ok';
+    span.style.left = `${index / last * 100}%`;
+    span.style.width = `calc(${100 / last}% - 2px)`;
+    span.style.height = `${Math.max(12, share * 100)}%`;
+    return span;
+  }));
+}
+function renderCoverageNote() {
+  if (!state.coverage) return;
+  const index = Math.round(state.t), bar = state.coverage[index];
+  [...$('coverage').children].forEach((span, i) => span.classList.toggle('current', i === index));
+  const trips = bar.trips === 1 ? 'this trip' : `${bar.trips} trips`;
+  $('coverage-note').textContent = !bar.measurements
+    ? `Data around ${bar.bucket}: no measurements yet for ${trips}.`
+    : `Data around ${bar.bucket}: ${bar.measured} of ${bar.trips} ${bar.trips === 1 ? 'trip has' : 'trips have'} measurements ` +
+      `(${bar.measurements} in total), ${bar.judged} with enough to judge (3+). Bars: taller = more trips measured, darker = more solid.`;
 }
 
 // From-view with one destination chosen: the whole day for that trip as one gradient bar.

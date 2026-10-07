@@ -38,7 +38,9 @@
           <button id="play" type="button" aria-pressed="false">▶ Play the day</button>
         </div>
         <input id="time" type="range" min="0" max="0" step="any" value="0" aria-label="Departure time">
+        <div class="coverage" id="coverage" aria-hidden="true"></div>
         <div class="ticks" id="ticks" aria-hidden="true"></div>
+        <p class="coverage-note" id="coverage-note"></p>
         <div class="strip" id="strip" hidden>
           <div class="strip-bar" id="strip-bar" role="img" aria-label="Whole day for this trip, as a colour gradient"><span class="strip-marker" id="strip-marker"></span></div>
           <p class="strip-note" id="strip-note"></p>

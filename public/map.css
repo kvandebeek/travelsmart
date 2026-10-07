@@ -58,6 +58,16 @@ select { width: 100%; min-width: 0; text-overflow: ellipsis; font: inherit; font
 .time-head strong { color: var(--ink); font-size: 1.6rem; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .time-head button { margin-left: auto; font: inherit; font-weight: 700; color: var(--chip-ink); background: var(--chip); border: 0; border-radius: 20px; padding: 7px 14px; cursor: pointer; }
 input[type=range] { width: 100%; accent-color: var(--accent); margin: 10px 0 2px; }
+/* Data coverage under the slider: neutral ink, so it never reads as busy/calm.
+   Height = share of shown trips with enough data; strength = how many measurements. */
+.coverage { position: relative; height: 28px; margin: 2px 9px 4px; border-bottom: 1px solid var(--line); }
+.coverage span { position: absolute; bottom: 0; transform: translateX(-50%); border-radius: 2px 2px 0 0; background: var(--ink); }
+.coverage span.thin { opacity: .3; }
+.coverage span.ok { opacity: .55; }
+.coverage span.good { opacity: .9; }
+.coverage span.none { height: 0 !important; border-bottom: 2px dashed var(--muted); background: none; opacity: .6; }
+.coverage span.current { box-shadow: 0 0 0 2px var(--accent); }
+.coverage-note { color: var(--muted); font-size: .82rem; margin: 6px 0 0; }
 .ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
 
 .map-panel { padding: 0; overflow: hidden; }

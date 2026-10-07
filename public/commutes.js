@@ -10,6 +10,24 @@ const wet = row => row.weather ? Math.max(row.weather.origin.precipitation || 0,
 const eventState = row => { if (!row.traffic_events) return 'unknown'; return Object.values(row.traffic_events.flemish_events_near_route || {}).some(n => n > 0) ? 'near' : 'clear'; };
 
 function option(select, value, label) { const el = document.createElement('option'); el.value = value; el.textContent = label; select.append(el); }
+const town = area => state.index.areas?.[area]?.name || area;
+const routeLabel = route => `${town(route.home_area)} → ${town(route.work_area)} (${route.work_place})`;
+
+// One group per home town; the group label names the residential neighbourhood.
+function fillRoutes(select) {
+  const groups = new Map();
+  for (const route of state.index.routes) {
+    const label = `${town(route.home_area)} · from ${route.home_place}`;
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(route);
+  }
+  for (const label of [...groups.keys()].sort((a, b) => a.localeCompare(b))) {
+    const group = document.createElement('optgroup'); group.label = label;
+    groups.get(label).sort((a, b) => routeLabel(a).localeCompare(routeLabel(b)))
+      .forEach(route => option(group, route.id, routeLabel(route)));
+    select.append(group);
+  }
+}
 function setText(id, value) { $(id).textContent = value; }
 
 async function loadMonth() {
@@ -83,7 +101,7 @@ function renderTable(rows) {
     const school = row.calendar ? `${row.calendar.flanders_school_day ? 'FL school' : 'FL break'} / ${row.calendar.fwb_school_day == null ? 'FWB ?' : row.calendar.fwb_school_day ? 'FWB school' : 'FWB break'}` : '—';
     const cells = [fmt.format(new Date(row.observed_at)), slot(row), minutes(row.duration_seconds), minutes(delay(row)),
       wet(row) === null ? 'Pending' : wet(row) ? 'Rain' : 'Dry', school, row.calendar?.origin_light || '—',
-      eventState(row), row.account || row.provider, row.status];
+      eventState(row), row.provider === 'here' ? 'HERE' : 'TomTom', row.status];
     for (const value of cells) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
     body.append(tr);
   }
@@ -93,10 +111,10 @@ function renderTable(rows) {
 function render() {
   const all = state.observations, routeId = $('route').value, direction = $('direction').value, provider = $('provider').value;
   const route = state.index.routes.find(item => item.id === routeId);
-  const account = $('account').value, rain = $('rain').value, school = $('school').value;
+  const rain = $('rain').value, school = $('school').value;
   const light = $('light').value, events = $('events').value, weekday = $('weekday').value;
   const base = all.filter(row => row.route_id === routeId && row.direction === direction &&
-    (provider === 'all' || row.provider === provider) && (account === 'all' || row.account === account) &&
+    (provider === 'all' || row.provider === provider) &&
     (weekday === 'all' || String(row.calendar?.weekday) === weekday) &&
     (light === 'all' || row.calendar?.origin_light === light) &&
     (events === 'all' || eventState(row) === events) &&
@@ -111,15 +129,16 @@ function render() {
   setText('covered', num(new Set(all.filter(row => row.status === 'ok').map(row => row.route_id)).size));
   setText('weather-count', num(all.filter(row => row.weather).length));
   const usage = $('account-usage'); usage.replaceChildren();
-  for (const [id,label] of [['tomtom_morning','TomTom morning'],['tomtom_evening','TomTom evening'],['here','HERE']]) {
-    const count = all.filter(row => row.account === id).length;
-    const budget = state.index.account_budgets?.[id];
+  const used = state.index.months.find(item => item.month === $('month').value)?.allowance_used_percent || {};
+  for (const [id,label] of [['tomtom','TomTom'],['here','HERE']]) {
+    const share = used[id] ?? 0;
     const card = document.createElement('div'), name = document.createElement('small'), value = document.createElement('strong');
-    name.textContent = label; value.textContent = budget ? `${num(count)} / ${num(budget.monthly_limit)}` : num(count);
-    card.append(name,value); usage.append(card);
+    const bar = document.createElement('span'); bar.className = 'usage-bar'; bar.style.setProperty('--used', `${Math.min(share, 100)}%`);
+    name.textContent = label; value.textContent = `${share.toLocaleString('en-BE', {maximumFractionDigits: 1})}%`;
+    card.append(name,value,bar); usage.append(card);
   }
-  setText('route-title', route ? `${route.home_place} ↔ ${route.work_place}` : 'Choose a route');
-  setText('route-meta', route ? `${route.home_area} to ${route.work_area} · ${route.tier} · ${direction === 'morning' ? 'home → work' : 'work → home'}` : '');
+  setText('route-title', route ? `${town(route.home_area)} ↔ ${town(route.work_area)}` : 'Choose a route');
+  setText('route-meta', route ? `Home: ${route.home_place}, ${town(route.home_area)} · Work: ${route.work_place}, ${town(route.work_area)} · ${direction === 'morning' ? 'morning, home → work' : 'evening, work → home'}` : '');
   setText('sample-count', `${good.length} samples`);
   setText('median-time', minutes(median(good.map(row => row.duration_seconds))));
   setText('median-delay', minutes(median(good.map(delay).filter(value => value != null))));
@@ -134,8 +153,8 @@ async function start() {
     if (!response.ok) throw new Error('Dashboard data has not been exported yet.');
     state.index = await response.json();
     state.index.months.slice().reverse().forEach(item => option($('month'), item.month, item.month));
-    state.index.routes.forEach(item => option($('route'), item.id, `${item.home_place} → ${item.work_place}`));
-    ['route','direction','provider','account','rain','school','light','events','weekday'].forEach(id => $(id).addEventListener('change', render));
+    fillRoutes($('route'));
+    ['route','direction','provider','rain','school','light','events','weekday'].forEach(id => $(id).addEventListener('change', render));
     $('month').addEventListener('change', () => loadMonth().catch(showError));
     await loadMonth();
   } catch (error) { showError(error); }

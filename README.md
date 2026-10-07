@@ -29,24 +29,23 @@ It does not just show a minute count. It shows each **best moment to leave**, wi
 | 🏘️ **446 candidate commutes** | 37 areas, each with a real residential neighbourhood (*Kessel-Lo, Sint-Amandsberg, Rooierheide…*) and an employment area (*Corda Campus, The Loop, European Quarter…*). |
 | 📏 **Sensible routes only** | Trips under **12 km** of road distance are excluded. Very long trips, such as Maaseik → Oostende, go on a watchlist and may later be split at a shared motorway point. |
 | 🗓️ **Budget-aware planner** | A deterministic monthly plan skips weekends and Belgian public holidays, measures 20 priority routes in every slot, and rotates the rest so each is seen in every slot each month. |
-| 🔑 **Multi-account aware** | Two TomTom accounts (morning and evening) and one HERE account, each with its own budget and reserve. Every observation records which account produced it. |
+| 🛡️ **Budget guards** | Hard monthly and daily caps per provider, with a reserve for manual checks. Every observation records which provider produced it. |
 | 🌦️ **Weather join** | Hourly Open-Meteo reanalysis at the origin when leaving and the destination on arrival. |
 | 🏫 **School calendars** | Flemish and French Community school days, both kept, because Brussels traffic feels both. |
 | 🌗 **Daylight** | Daylight, twilight or dark at departure and arrival, from a solar-position calculation. |
 | 🚧 **Road events** | Live Flemish DATEX II jams, accidents, roadworks and lane closures within 500 m of the actual route geometry. |
-| 📊 **Static dashboard** | Plain HTML, CSS and JavaScript on GitHub Pages, with filters for rain, school, daylight, weekday, account and road events. |
+| 📊 **Static dashboard** | Plain HTML, CSS and JavaScript on GitHub Pages, with filters for rain, school, daylight, weekday, provider and road events. |
 
 ## 🧭 How it works
 
 ```mermaid
 flowchart LR
     A["⏰ GitHub Actions<br/>Europe/Brussels cron"] --> B{"Planner<br/>which routes are due?"}
-    B -->|morning| C["TomTom #1<br/>home → work"]
-    B -->|evening| D["TomTom #2<br/>work → home"]
+    B -->|"morning: home → work<br/>evening: work → home"| C["TomTom<br/>live traffic"]
     B -->|small sample| E["HERE<br/>cross-check"]
-    C & D & E --> F["observations/*.jsonl<br/>committed to the repo"]
+    C & E --> F["observations/*.jsonl<br/>committed to the repo"]
     G["Open-Meteo<br/>(5 days later)"] --> F
-    H["Flemish DATEX II<br/>road events"] --> C & D
+    H["Flemish DATEX II<br/>road events"] --> C
     F --> I["📊 GitHub Pages<br/>dashboard"]
 ```
 
@@ -58,13 +57,11 @@ flowchart LR
 
 ### 💰 The October 2026 budget
 
-| | Morning (TomTom #1) | Evening (TomTom #2) |
+| TomTom | Morning | Evening |
 |---|---:|---:|
 | Slots per working day | 15 | 9 |
 | Working days | 22 | 22 |
 | Planned calls | 17,490 | 10,494 |
-| Free monthly allowance | 20,000 | 20,000 |
-| Kept in reserve | 2,000 | 2,000 |
 
 HERE is a small cross-check: 4 routes per slot, capped at **96 calls a day and 3,000 a month**. That is well below the lowest published free allowance for HERE car routing, 5,000 a month. Every attempt counts towards the cap, including failed ones.
 
@@ -73,14 +70,13 @@ Run `python scripts/plan_commutes.py --month 2026-10` to recompute it. No API ca
 ## 🚦 Project status
 
 > [!NOTE]
-> All 446 commutes have road-snapped home and work points in `config/commute_anchors.yaml`, each with a measured road distance of at least 12 km. A slot without a configured API key is skipped with a warning; it never borrows another account's key.
+> All 446 commutes have road-snapped home and work points in `config/commute_anchors.yaml`, each with a measured road distance of at least 12 km. A slot without a configured API key is skipped with a warning instead of failing.
 
 | Component | State |
 |---|---|
 | Commute catalogue and monthly planner | ✅ Live |
 | Home and work points (OpenStreetMap, road-snapped) | ✅ 446 / 446 routes verified |
-| TomTom morning account | ✅ Collecting |
-| TomTom evening account | ⏳ Waiting for the `TOMTOM_API_KEY2` secret |
+| TomTom live traffic | ✅ Collecting |
 | HERE cross-check sample | ✅ Collecting, hard-capped at 96 a day and 3,000 a month |
 | Weather, school, daylight and road-event context | ✅ Live |
 | Commute dashboard | ✅ GitHub Pages |
@@ -104,9 +100,9 @@ python -m http.server --directory public 8080            # open http://localhost
 
 ### Running it on your own fork
 
-1. Add the repository secrets **`TOMTOM_API_KEY`** (morning account), **`TOMTOM_API_KEY2`** (evening account) and **`HERE_API_KEY`**.
+1. Add your TomTom and HERE keys as repository secrets, using the names in `config/commute_schedule.yaml`.
 2. Enable **Settings → Pages → Source: GitHub Actions**.
-3. Check `here_daily_limit` and `here_monthly_limit` in `config/commute_schedule.yaml` against your HERE plan.
+3. Check the TomTom budget and `here_daily_limit` / `here_monthly_limit` in `config/commute_schedule.yaml` against your plans.
 
 Each endpoint in `config/commute_anchors.yaml` is a residential neighbourhood or an employment area. It was found in OpenStreetMap, reviewed so that, for example, no train station counts as a home, and snapped to the nearest drivable road. A route without a `validated_routes` entry is never collected.
 
@@ -116,7 +112,7 @@ Each endpoint in `config/commute_anchors.yaml` is a residential neighbourhood or
 config/
   commute_catalogue.yaml   areas, neighbourhoods, employment areas, cut-offs
   commute_routes.csv       generated catalogue (scripts/build_commute_catalogue.py)
-  commute_schedule.yaml    slots, accounts, budgets, priority routes
+  commute_schedule.yaml    slots, budgets, priority routes
   commute_anchors.yaml     verified access points (the on-switch)
 travelsmart/
   commute_planner.py       working days, holidays, budgeted monthly plan
@@ -145,7 +141,7 @@ OSRM estimates have **no live traffic**. A spot check found rural routes close t
 
 | Source | Used for | Terms |
 |---|---|---|
-| [TomTom Routing API](https://developer.tomtom.com/routing-api/documentation) | Live commute times | Free tier, per account |
+| [TomTom Routing API](https://developer.tomtom.com/routing-api/documentation) | Live commute times | Free tier |
 | [HERE Routing v8](https://www.here.com/docs/bundle/routing-api-developer-guide-v8/page/README.html) | Cross-check sample | Free tier |
 | [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api) | Historical weather | CC BY 4.0 |
 | [Vlaams Verkeerscentrum DATEX II](https://www.verkeerscentrum.be/) | Road events | CC BY. © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum |

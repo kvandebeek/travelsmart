@@ -1,0 +1,404 @@
+# Canonical municipal-centre points, deliberately configurable rather than code constants.
+# Diepenbeek: town hall (Gemeenteplein 1); Brussels: Brussels Town Hall, Grand-Place.
+locations:
+  diepenbeek:
+    display_name: Diepenbeek
+    municipality: Diepenbeek
+    country: BE
+    province: Limburg
+    latitude: 50.9074
+    longitude: 5.4186
+  brussels:
+    display_name: Brussels
+    municipality: Brussels
+    country: BE
+    province: Brussels-Capital Region
+    latitude: 50.8467
+    longitude: 4.3525
+  antwerp:
+    display_name: Antwerp
+    municipality: Antwerp
+    country: BE
+    province: Antwerp
+    # Antwerp City Hall, Grote Markt
+    latitude: 51.2211
+    longitude: 4.3997
+  ghent:
+    display_name: Ghent
+    municipality: Ghent
+    country: BE
+    province: East Flanders
+    # Ghent City Hall, Botermarkt
+    latitude: 51.0543
+    longitude: 3.7215
+  leuven:
+    display_name: Leuven
+    municipality: Leuven
+    country: BE
+    province: Flemish Brabant
+    # Leuven City Hall, Grote Markt
+    latitude: 50.8798
+    longitude: 4.7005
+  kinrooi:
+    display_name: Kinrooi
+    municipality: Kinrooi
+    country: BE
+    province: Limburg
+    # Municipal offices, Breeërsteenweg
+    latitude: 51.1457
+    longitude: 5.7415
+  bilzen:
+    display_name: Bilzen
+    municipality: Bilzen-Hoeselt
+    country: BE
+    province: Limburg
+    # Market square / municipal centre
+    latitude: 50.8736
+    longitude: 5.5184
+  hamont:
+    display_name: Hamont
+    municipality: Hamont-Achel
+    country: BE
+    province: Limburg
+    # Hamont town centre
+    latitude: 51.2527
+    longitude: 5.5458
+  bocholt:
+    display_name: Bocholt
+    municipality: Bocholt
+    country: BE
+    province: Limburg
+    # Bocholt town hall / centre
+    latitude: 51.1736
+    longitude: 5.5797
+  ostend:
+    display_name: Oostende
+    municipality: Oostende
+    country: BE
+    province: West Flanders
+    # Oostende City Hall, Vindictivelaan
+    latitude: 51.2302
+    longitude: 2.9195
+  # --- Largest municipalities per province (approximate town-centre points) ---
+  mechelen:
+    display_name: "Mechelen"
+    municipality: "Mechelen"
+    country: BE
+    province: Antwerp
+    latitude: 51.0259
+    longitude: 4.4776
+  turnhout:
+    display_name: "Turnhout"
+    municipality: "Turnhout"
+    country: BE
+    province: Antwerp
+    latitude: 51.3227
+    longitude: 4.9447
+  geel:
+    display_name: "Geel"
+    municipality: "Geel"
+    country: BE
+    province: Antwerp
+    latitude: 51.162
+    longitude: 4.9891
+  brasschaat:
+    display_name: "Brasschaat"
+    municipality: "Brasschaat"
+    country: BE
+    province: Antwerp
+    latitude: 51.2917
+    longitude: 4.4917
+  hasselt:
+    display_name: "Hasselt"
+    municipality: "Hasselt"
+    country: BE
+    province: Limburg
+    latitude: 50.9307
+    longitude: 5.3325
+  genk:
+    display_name: "Genk"
+    municipality: "Genk"
+    country: BE
+    province: Limburg
+    latitude: 50.965
+    longitude: 5.5
+  beringen:
+    display_name: "Beringen"
+    municipality: "Beringen"
+    country: BE
+    province: Limburg
+    latitude: 51.05
+    longitude: 5.2269
+  sinttruiden:
+    display_name: "Sint-Truiden"
+    municipality: "Sint-Truiden"
+    country: BE
+    province: Limburg
+    latitude: 50.8168
+    longitude: 5.1865
+  maasmechelen:
+    display_name: "Maasmechelen"
+    municipality: "Maasmechelen"
+    country: BE
+    province: Limburg
+    latitude: 50.9647
+    longitude: 5.6988
+  aalst:
+    display_name: "Aalst"
+    municipality: "Aalst"
+    country: BE
+    province: East Flanders
+    latitude: 50.9378
+    longitude: 4.041
+  sintniklaas:
+    display_name: "Sint-Niklaas"
+    municipality: "Sint-Niklaas"
+    country: BE
+    province: East Flanders
+    latitude: 51.1651
+    longitude: 4.1437
+  beveren:
+    display_name: "Beveren"
+    municipality: "Beveren"
+    country: BE
+    province: East Flanders
+    latitude: 51.2133
+    longitude: 4.2556
+  dendermonde:
+    display_name: "Dendermonde"
+    municipality: "Dendermonde"
+    country: BE
+    province: East Flanders
+    latitude: 51.0286
+    longitude: 4.1017
+  bruges:
+    display_name: "Bruges"
+    municipality: "Bruges"
+    country: BE
+    province: West Flanders
+    latitude: 51.2093
+    longitude: 3.2247
+  kortrijk:
+    display_name: "Kortrijk"
+    municipality: "Kortrijk"
+    country: BE
+    province: West Flanders
+    latitude: 50.828
+    longitude: 3.2647
+  roeselare:
+    display_name: "Roeselare"
+    municipality: "Roeselare"
+    country: BE
+    province: West Flanders
+    latitude: 50.9453
+    longitude: 3.1246
+  waregem:
+    display_name: "Waregem"
+    municipality: "Waregem"
+    country: BE
+    province: West Flanders
+    latitude: 50.8884
+    longitude: 3.4272
+  vilvoorde:
+    display_name: "Vilvoorde"
+    municipality: "Vilvoorde"
+    country: BE
+    province: Flemish Brabant
+    latitude: 50.9281
+    longitude: 4.4285
+  dilbeek:
+    display_name: "Dilbeek"
+    municipality: "Dilbeek"
+    country: BE
+    province: Flemish Brabant
+    latitude: 50.8478
+    longitude: 4.2603
+  halle:
+    display_name: "Halle"
+    municipality: "Halle"
+    country: BE
+    province: Flemish Brabant
+    latitude: 50.7339
+    longitude: 4.2349
+  grimbergen:
+    display_name: "Grimbergen"
+    municipality: "Grimbergen"
+    country: BE
+    province: Flemish Brabant
+    latitude: 50.9344
+    longitude: 4.3725
+  brainelalleud:
+    display_name: "Braine-l'Alleud"
+    municipality: "Braine-l'Alleud"
+    country: BE
+    province: Walloon Brabant
+    latitude: 50.684
+    longitude: 4.368
+  wavre:
+    display_name: "Wavre"
+    municipality: "Wavre"
+    country: BE
+    province: Walloon Brabant
+    latitude: 50.7167
+    longitude: 4.6014
+  ottignies:
+    display_name: "Ottignies-LLN"
+    municipality: "Ottignies-LLN"
+    country: BE
+    province: Walloon Brabant
+    latitude: 50.6694
+    longitude: 4.5675
+  waterloo:
+    display_name: "Waterloo"
+    municipality: "Waterloo"
+    country: BE
+    province: Walloon Brabant
+    latitude: 50.7147
+    longitude: 4.3996
+  nivelles:
+    display_name: "Nivelles"
+    municipality: "Nivelles"
+    country: BE
+    province: Walloon Brabant
+    latitude: 50.5987
+    longitude: 4.3283
+  charleroi:
+    display_name: "Charleroi"
+    municipality: "Charleroi"
+    country: BE
+    province: Hainaut
+    latitude: 50.4108
+    longitude: 4.4446
+  mons:
+    display_name: "Mons"
+    municipality: "Mons"
+    country: BE
+    province: Hainaut
+    latitude: 50.4542
+    longitude: 3.9523
+  lalouviere:
+    display_name: "La Louvière"
+    municipality: "La Louvière"
+    country: BE
+    province: Hainaut
+    latitude: 50.4786
+    longitude: 4.1873
+  tournai:
+    display_name: "Tournai"
+    municipality: "Tournai"
+    country: BE
+    province: Hainaut
+    latitude: 50.6057
+    longitude: 3.388
+  mouscron:
+    display_name: "Mouscron"
+    municipality: "Mouscron"
+    country: BE
+    province: Hainaut
+    latitude: 50.7439
+    longitude: 3.2144
+  liege:
+    display_name: "Liège"
+    municipality: "Liège"
+    country: BE
+    province: Liège
+    latitude: 50.6326
+    longitude: 5.5797
+  seraing:
+    display_name: "Seraing"
+    municipality: "Seraing"
+    country: BE
+    province: Liège
+    latitude: 50.5833
+    longitude: 5.5
+  verviers:
+    display_name: "Verviers"
+    municipality: "Verviers"
+    country: BE
+    province: Liège
+    latitude: 50.5896
+    longitude: 5.8624
+  herstal:
+    display_name: "Herstal"
+    municipality: "Herstal"
+    country: BE
+    province: Liège
+    latitude: 50.6633
+    longitude: 5.6283
+  ans:
+    display_name: "Ans"
+    municipality: "Ans"
+    country: BE
+    province: Liège
+    latitude: 50.6603
+    longitude: 5.5214
+  arlon:
+    display_name: "Arlon"
+    municipality: "Arlon"
+    country: BE
+    province: Luxembourg
+    latitude: 49.6833
+    longitude: 5.8167
+  marche:
+    display_name: "Marche-en-Famenne"
+    municipality: "Marche-en-Famenne"
+    country: BE
+    province: Luxembourg
+    latitude: 50.226
+    longitude: 5.344
+  aubange:
+    display_name: "Aubange"
+    municipality: "Aubange"
+    country: BE
+    province: Luxembourg
+    latitude: 49.5667
+    longitude: 5.7167
+  bastogne:
+    display_name: "Bastogne"
+    municipality: "Bastogne"
+    country: BE
+    province: Luxembourg
+    latitude: 50.0
+    longitude: 5.7167
+  virton:
+    display_name: "Virton"
+    municipality: "Virton"
+    country: BE
+    province: Luxembourg
+    latitude: 49.5667
+    longitude: 5.5333
+  namur:
+    display_name: "Namur"
+    municipality: "Namur"
+    country: BE
+    province: Namur
+    latitude: 50.4674
+    longitude: 4.872
+  sambreville:
+    display_name: "Sambreville"
+    municipality: "Sambreville"
+    country: BE
+    province: Namur
+    latitude: 50.448
+    longitude: 4.631
+  gembloux:
+    display_name: "Gembloux"
+    municipality: "Gembloux"
+    country: BE
+    province: Namur
+    latitude: 50.56
+    longitude: 4.6967
+  andenne:
+    display_name: "Andenne"
+    municipality: "Andenne"
+    country: BE
+    province: Namur
+    latitude: 50.49
+    longitude: 5.0967
+  jemeppe:
+    display_name: "Jemeppe-sur-Sambre"
+    municipality: "Jemeppe-sur-Sambre"
+    country: BE
+    province: Namur
+    latitude: 50.4503
+    longitude: 4.6806

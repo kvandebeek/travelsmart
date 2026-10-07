@@ -1,0 +1,17 @@
+# Every ordered pair of configured locations becomes an active directional driving journey (N x (N-1)).
+# Use a list of location ids instead of "all" to restrict the matrix.
+all_pairs: all
+sufficient_samples: 1  # Minimum samples before a time is shown at all (deliberately low during testing).
+reliable_samples: 20   # Below this the dashboard labels figures as a "preview" range.
+min_spread: 0.03      # Best vs busiest hour must differ by at least this fraction before a "best moment" is claimed.
+schedules:
+  timezone: Europe/Brussels
+  windows:
+    - weekdays: [0, 1, 2, 3, 4]
+      start: "05:30"
+      end: "09:30"
+      interval_minutes: 15
+    - weekdays: [0, 1, 2, 3, 4]
+      start: "15:00"
+      end: "19:00"
+      interval_minutes: 15

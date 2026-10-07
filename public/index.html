@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>TravelSmart Belgium</title>
+  <script>try{var t=localStorage.getItem("theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="top">
+      <div>
+        <h1>TravelSmart Belgium</h1>
+        <p class="sub">The best moment to travel between Belgian towns <span id="generated"></span></p>
+      </div>
+      <div class="tools">
+      <span class="pill" title="Built from your own recorded history. Where no traffic data exists for a road, it counts as free-flow.">Historical estimate</span>
+      <button id="theme" type="button" aria-label="Toggle light and dark theme" title="Toggle light / dark">◐</button>
+      </div>
+    </header>
+
+    <div class="layout">
+    <div class="side">
+    <section class="card picker" aria-label="Route picker">
+      <label>From <select id="from"></select></label>
+      <button id="swap" type="button" aria-label="Swap origin and destination">⇄</button>
+      <label>To <select id="to"></select></label>
+    </section>
+
+    <section id="detail" class="card" aria-live="polite" hidden></section>
+    </div>
+
+    <section class="card">
+      <div class="matrix-head"><h2>All routes <span class="hint">best moment to leave, row → column</span></h2>
+        <label class="inline">Province <select id="province" aria-label="Province shown in the matrix"></select></label></div>
+      <div class="scroll"><table id="matrix"></table></div>
+      <div class="legend" aria-hidden="true"><span>timing matters little</span><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i><i class="h5"></i><span>timing matters a lot</span></div>
+    </section>
+    </div>
+
+    <footer>Version 0.1 · The ranking firms up as samples accumulate.</footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

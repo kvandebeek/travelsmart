@@ -1,0 +1,7 @@
+# External open-data sources. See travelsmart/verified_fetch.py for why miv needs an extra CA certificate.
+miv:
+  # Flemish Traffic Center loop detectors: per-minute counts and speeds on Flemish motorways (open data).
+  # Host moved from miv.opendata.belfla.be (AWV, 2026-10-06); the new name is covered by the *.belfla.be certificate.
+  data_url: https://miv-opendata.belfla.be/miv/verkeersdata
+  config_url: https://miv-opendata.belfla.be/miv/configuratie/xml
+  extra_ca: config/certs/digicert-global-g2-tls-rsa-sha256-2020-ca1.pem   # public DigiCert intermediate the server fails to send

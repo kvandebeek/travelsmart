@@ -1,0 +1,14 @@
+services:
+  # Dashboard + API.
+  travelsmart:
+    build: .
+    ports: ["8000:8000"]
+    volumes: ["./data:/app/data", "./public/data:/app/public/data"]
+    restart: unless-stopped
+
+  # Polls the Flemish detector feed around the clock and folds readings into the running statistics.
+  poller:
+    build: .
+    command: ["python", "scripts/run_miv_poller.py"]
+    volumes: ["./data:/app/data", "./public/data:/app/public/data"]
+    restart: unless-stopped

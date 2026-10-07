@@ -5,9 +5,10 @@ on:
     branches: [master, main]
   workflow_dispatch:
   schedule:
-    - cron: '0,20,40 5 * * 1-5'
+    # Must cover every slot in config/commute_schedule.yaml (checked by the tests).
+    - cron: '0,30 5,6 * * 1-5'
       timezone: Europe/Brussels
-    - cron: '0,20,40,55 6 * * 1-5'
+    - cron: '50 6 * * 1-5'
       timezone: Europe/Brussels
     - cron: '10,25,40,55 7 * * 1-5'
       timezone: Europe/Brussels
@@ -15,9 +16,9 @@ on:
       timezone: Europe/Brussels
     - cron: '0 9 * * 1-5'
       timezone: Europe/Brussels
-    - cron: '0,30 14-17 * * 1-5'
+    - cron: '30 14 * * 1-5'
       timezone: Europe/Brussels
-    - cron: '0 18 * * 1-5'
+    - cron: '0,30 15-17 * * 1-5'
       timezone: Europe/Brussels
     - cron: '10 12 * * *'
       timezone: Europe/Brussels

@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import csv
 import time
+from collections import Counter
 from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
 
@@ -116,7 +117,22 @@ def select_pairs(catalogue: dict, schedule: dict, homes: dict, works: dict, home
         if unknown:
             raise ValueError(f"Unknown corridor nodes: {sorted(unknown)}")
         pairs[item["home"], item["work"]] = {"tier": "watchlist", "corridor": ";".join(item.get("corridor", []))}
-    return pairs
+
+    # One route per (home town, employment area): several neighbourhoods of one town
+    # driving to the same employment area add little. Instead, the town's start places
+    # are spread over its destinations: fewest routes so far first, then nearest.
+    groups: dict[tuple[str, str], list[str]] = {}
+    for home_id, work_id in pairs:
+        groups.setdefault((home_town[home_id], work_id), []).append(home_id)
+    load: Counter[str] = Counter()
+    kept = {}
+    for town, work_id in sorted(groups):
+        candidates = groups[town, work_id]
+        pool = [h for h in candidates if pairs[h, work_id]["tier"] == "watchlist"] or candidates
+        home_id = min(pool, key=lambda h: (load[h], distance_km(homes[h], works[work_id]), h))
+        load[home_id] += 1
+        kept[home_id, work_id] = pairs[home_id, work_id]
+    return kept
 
 
 def main() -> None:

@@ -1,7 +1,7 @@
 import json
 import shutil
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import yaml
@@ -91,7 +91,11 @@ def test_extra_stream_every_five_minutes_from_the_list():
     polls = plan_month(2026, 10, schedule, routes)
     extra = [p for p in polls if p.tier == "extra"]
     config = schedule["extra_routes"]
-    assert len(extra) == 22 * 2 * 4 * 60 // config["every_minutes"]  # 22 days, two 4-hour windows
+    per_day = sum(
+        (datetime.strptime(end, "%H:%M") - datetime.strptime(start, "%H:%M")).seconds // 60 // config["every_minutes"]
+        + (1 if (datetime.strptime(end, "%H:%M") - datetime.strptime(start, "%H:%M")).seconds // 60 % config["every_minutes"] else 0)
+        for start, end in config["windows"].values())
+    assert len(extra) == 22 * per_day
     by_id = {route["id"]: route for route in routes}
     listed = set(config["routes"])
     assert all(p.route_id in listed or f"{by_id[p.route_id]['home_area']}__{by_id[p.route_id]['work_area']}" in listed
@@ -101,6 +105,33 @@ def test_extra_stream_every_five_minutes_from_the_list():
     assert {p.direction for p in extra if p.scheduled_at.hour < 12} == {"morning"}
     assert len({p.route_id for p in extra}) > len(listed)  # town pairs rotate over their places
     assert extra == [p for p in plan_month(2026, 10, schedule, routes) if p.tier == "extra"]  # reproducible
-    local = ZoneInfo("Europe/Brussels")
-    due = due_polls(datetime(2026, 10, 7, 7, 17, tzinfo=local), schedule, extra)
-    assert [p.scheduled_at.strftime("%H:%M") for p in due] == ["07:15"]
+    tick = extra[len(extra) // 3].scheduled_at
+    due = due_polls(tick + timedelta(minutes=2), schedule, extra)
+    assert [p.scheduled_at for p in due] == [tick]
+
+
+def _cron_values(field: str, low: int, high: int) -> set[int]:
+    values = set()
+    for part in field.split(","):
+        part, _, step = part.partition("/")
+        first, last = (low, high) if part == "*" else (int(part.split("-")[0]), int(part.split("-")[-1]))
+        values.update(range(first, last + 1, int(step or 1)))
+    return values
+
+
+def _cron_times(workflow: str) -> set[str]:
+    config = yaml.safe_load((ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8"))
+    times = set()
+    for entry in config[True]["schedule"]:  # YAML 1.1 reads the key `on` as True
+        minute, hour, *_ = entry["cron"].split()
+        times |= {f"{h:02d}:{m:02d}" for h in _cron_values(hour, 0, 23) for m in _cron_values(minute, 0, 59)}
+    return times
+
+
+def test_workflow_triggers_cover_every_planned_time():
+    schedule, routes = load_plan_inputs()
+    polls = plan_month(2026, 10, schedule, routes)
+    regular = {p.scheduled_at.strftime("%H:%M") for p in polls if p.tier != "extra"}
+    extra = {p.scheduled_at.strftime("%H:%M") for p in polls if p.tier == "extra"}
+    assert regular <= _cron_times("commutes.yml"), sorted(regular - _cron_times("commutes.yml"))
+    assert extra <= _cron_times("extra-routes.yml"), sorted(extra - _cron_times("extra-routes.yml"))

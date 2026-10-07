@@ -40,11 +40,14 @@ function fillPlaces() {
   }
 }
 function setText(id, value) { $(id).textContent = value; }
+// GitHub Pages lets browsers cache files for 10 minutes. The index is always fetched fresh;
+// data files carry its publish time, so a new publish is never hidden by an old copy.
+const fresh = () => encodeURIComponent(state.index?.generated_at || Date.now());
 
 async function loadMonth() {
   const month = $('month').value;
   if (!month) { state.observations = []; render(); return; }
-  const response = await fetch(`data/commutes/${month}.json`);
+  const response = await fetch(`data/commutes/${month}.json?v=${fresh()}`);
   if (!response.ok) throw new Error(`Could not load ${month}`);
   state.observations = await response.json();
   const observedPairs = new Set(state.observations.map(routeOf).filter(Boolean).map(pairOf));
@@ -174,7 +177,7 @@ const tierLabel = tier => ({core: 'Priority', rotating: 'Rotation', extra: 'Rand
 
 async function renderLatest() {
   const body = $('latest'); body.replaceChildren();
-  const response = await fetch('data/commutes/latest.json');
+  const response = await fetch(`data/commutes/latest.json?v=${fresh()}`);
   const feed = response.ok ? await response.json() : {calls: []};
   if (feed.generated_at) setText('latest-updated', `Updated ${fmt.format(new Date(feed.generated_at))}`);
   for (const row of feed.calls) {
@@ -196,7 +199,7 @@ async function renderLatest() {
 
 async function start() {
   try {
-    const response = await fetch('data/commutes/index.json');
+    const response = await fetch('data/commutes/index.json', {cache: 'no-store'});
     if (!response.ok) throw new Error('Dashboard data has not been exported yet.');
     state.index = await response.json();
     state.index.months.slice().reverse().forEach(item => option($('month'), item.month, item.month));

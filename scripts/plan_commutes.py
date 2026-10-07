@@ -24,6 +24,7 @@ def main() -> None:
     summary = {"month": month, "candidate_routes": len(routes), "planned_calls": len(polls),
                "core_calls": sum(poll.tier == "core" for poll in polls),
                "rotating_calls": sum(poll.tier == "rotating" for poll in polls),
+               "extra_calls": sum(poll.tier == "extra" for poll in polls),
                "calls_by_account": dict(sorted(Counter(poll.account for poll in polls).items())),
                "distinct_routes": len({poll.route_id for poll in polls}),
                "daily_calls": dict(sorted(Counter(poll.scheduled_at.date().isoformat() for poll in polls).items()))}

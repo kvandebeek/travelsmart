@@ -19,6 +19,20 @@ here_daily_limit: 96
 here_monthly_limit: 3000
 here_routes_per_slot: 4
 
+# Extra measurements: every 5 minutes during the peaks, one pseudo-random route
+# from this list. Entries are town pairs (rotating over their start places and
+# employment areas) or exact route ids from commute_routes.csv. They run in
+# their own workflow and use the evening account, which has spare capacity.
+extra_routes:
+  account: evening
+  every_minutes: 5
+  windows: {morning: ["05:00", "09:00"], evening: ["14:00", "18:00"]}
+  routes:
+    - diepenbeek__brussels
+    - diepenbeek__leuven
+    - hasselt__brussels
+    - bilzen__brussels
+
 # Only the ten national statutory dates are computed automatically. Company or
 # sector replacement days can be added here as YYYY-MM-DD dates.
 extra_excluded_dates: []

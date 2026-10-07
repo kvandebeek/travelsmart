@@ -13,8 +13,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--provider", choices=("tomtom", "here"), default="tomtom")
     parser.add_argument("--execute", action="store_true", help="Spend API calls for verified routes")
+    parser.add_argument("--stream", choices=("regular", "extra"), default="regular",
+                        help="regular departure slots, or the 5-minute extra route stream")
     args = parser.parse_args()
-    result = run_tick(datetime.now(timezone.utc), provider=args.provider, execute=args.execute)
+    result = run_tick(datetime.now(timezone.utc), provider=args.provider, execute=args.execute, stream=args.stream)
     print(json.dumps(result))
     if result["reason"] == "missing_keys":
         # GitHub Actions annotation: visible on the run without failing it.

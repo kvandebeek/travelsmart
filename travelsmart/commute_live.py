@@ -66,7 +66,7 @@ def append_observation(path: Path, observation: dict) -> None:
         file.write(json.dumps(observation, ensure_ascii=False, separators=(",", ":")) + "\n")
 
 
-def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
+def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, stream: str = "regular",
              config_dir: Path = ROOT / "config", data_dir: Path = ROOT / "observations") -> dict:
     """Run the latest due slot; execution requires validated anchors and a key."""
     if now.tzinfo is None:
@@ -77,7 +77,15 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
     if provider == "here" and (schedule["here_daily_limit"] <= 0 or schedule.get("here_monthly_limit", 0) <= 0):
         return {"due": 0, "attempted": 0, "stored": 0, "reason": "here_disabled"}
     local = now.astimezone(ZoneInfo(schedule["timezone"]))
-    polls = due_polls(now, schedule, plan_month(local.year, local.month, schedule, routes))
+    if stream not in ("regular", "extra"):
+        raise ValueError(f"Unknown stream: {stream}")
+    if provider == "here" and stream == "extra":
+        return {"due": 0, "attempted": 0, "stored": 0, "reason": "here_regular_only"}
+    # Each stream has its own clock: a late regular run must still find its slot
+    # even when a 5-minute extra tick is more recent.
+    planned = [poll for poll in plan_month(local.year, local.month, schedule, routes)
+               if (poll.tier == "extra") == (stream == "extra")]
+    polls = due_polls(now, schedule, planned)
     if provider == "here":
         polls = sorted(polls, key=lambda poll: hashlib.sha256(
             f"here|{poll.scheduled_at.isoformat()}|{poll.route_id}".encode()).hexdigest())[:schedule["here_routes_per_slot"]]

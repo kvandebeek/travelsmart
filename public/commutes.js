@@ -73,7 +73,9 @@ function renderChart(rows) {
     const value = low + span*i/4;
     parts.push(`<line class="grid" x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}"/><text class="axis" x="3" y="${y(value)+4}">${Math.round(value)}m</text>`);
   }
-  slots.forEach((s,i) => parts.push(`<text class="axis" text-anchor="middle" x="${x(i)}" y="${height-8}">${s}</text>`));
+  // With 5-minute extra measurements there can be dozens of slots: label the hours and half hours only.
+  const labelled = s => slots.length <= 16 || s.endsWith(':00') || s.endsWith(':30');
+  slots.forEach((s,i) => { if (labelled(s)) parts.push(`<text class="axis" text-anchor="middle" x="${x(i)}" y="${height-8}">${s}</text>`); });
   const line = slots.map((s,i) => `${x(i)},${y(median(rows.filter(row => slot(row) === s).map(row => row.duration_seconds/60)))}`).join(' ');
   parts.push(`<polyline class="median" points="${line}"/>`);
   rows.forEach((row,i) => {

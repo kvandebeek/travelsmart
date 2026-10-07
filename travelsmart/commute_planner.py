@@ -19,7 +19,7 @@ from travelsmart.config import ROOT
 class PlannedPoll:
     route_id: str
     direction: str  # morning: home -> work; evening: work -> home
-    tier: str       # core or rotating
+    tier: str       # core, rotating or extra
     scheduled_at: datetime
     account: str
 
@@ -66,6 +66,10 @@ def load_plan_inputs(config_dir: Path = ROOT / "config", *, active_only: bool = 
     town_pairs = {town_pair(route) for route in routes}
     if set(schedule["core_routes"]) - town_pairs:
         raise ValueError(f"Core town pairs without routes: {sorted(set(schedule['core_routes']) - town_pairs)}")
+    extra = schedule.get("extra_routes") or {}
+    unknown = [entry for entry in extra.get("routes") or [] if entry not in ids and entry not in town_pairs]
+    if unknown:
+        raise ValueError(f"Extra routes not in the catalogue: {unknown}")
     slots = schedule["morning_slots"] + schedule["evening_slots"]
     if len(slots) != len(set(slots)) or slots != sorted(slots):
         raise ValueError("Commute slots must be unique and sorted")
@@ -147,9 +151,48 @@ def plan_month(year: int, month: int, schedule: dict, routes: list[dict]) -> lis
                     second_index = (first_index + max(1, len(days)//2)) % len(days)
                     second_when = datetime.combine(days[second_index], time.fromisoformat(slot), tzinfo=zone)
                     polls.append(PlannedPoll(route_id, direction, "rotating", second_when, account["id"]))
-        if sum(p.account == account["id"] for p in polls) > budget:
-            raise AssertionError(f"{account['id']} plan exceeds monthly budget")
+    polls.extend(_extra_polls(days, schedule, routes, zone, {(p.route_id, p.scheduled_at) for p in polls}))
+    for account in schedule["tomtom_accounts"].values():
+        used, budget = sum(p.account == account["id"] for p in polls), account["monthly_limit"] - account["reserve"]
+        if used > budget:
+            raise ValueError(f"{account['id']} plan needs {used} calls; budget is {budget}")
     polls.sort(key=lambda poll: (poll.scheduled_at, poll.route_id))
+    return polls
+
+
+def _extra_polls(days: list[date], schedule: dict, routes: list[dict], zone: ZoneInfo,
+                 taken: set[tuple[str, datetime]]) -> list[PlannedPoll]:
+    """One pseudo-random route from the extra list every few minutes during the peaks.
+
+    The draw is seeded by date and time, so the plan is reproducible and its cost
+    is known in advance. A town pair entry also draws one of its start place x
+    employment area routes. A route already planned at that moment is skipped.
+    """
+    config = schedule.get("extra_routes") or {}
+    ids = {route["id"] for route in routes}
+    options = []
+    for entry in config.get("routes") or []:
+        matches = [entry] if entry in ids else sorted(r["id"] for r in routes if town_pair(r) == entry)
+        if matches:
+            options.append(matches)
+    if not options:
+        return []
+    account = schedule["tomtom_accounts"][config["account"]]["id"]
+    step = timedelta(minutes=config["every_minutes"])
+    polls = []
+    for day in days:
+        for direction, (start, end) in config["windows"].items():
+            when = datetime.combine(day, time.fromisoformat(start), tzinfo=zone)
+            stop = datetime.combine(day, time.fromisoformat(end), tzinfo=zone)
+            while when < stop:
+                seed = int(_stable_rank("extra", when.isoformat())[:12], 16)
+                candidates = [entry[(seed // len(options)) % len(entry)] for entry in options]
+                for offset in range(len(candidates)):
+                    route_id = candidates[(seed + offset) % len(candidates)]
+                    if (route_id, when) not in taken:
+                        polls.append(PlannedPoll(route_id, direction, "extra", when, account))
+                        break
+                when += step
     return polls
 
 

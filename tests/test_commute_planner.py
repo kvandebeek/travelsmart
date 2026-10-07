@@ -43,7 +43,7 @@ def test_due_slot_discards_stale_work_and_only_verified_routes_are_active():
         assert route["home_id"] in anchors["home"] and route["work_id"] in anchors["work"]
         assert anchors["validated_routes"][route["id"]]["road_distance_km"] >= 12
     schedule, routes = load_plan_inputs()
-    polls = plan_month(2026, 10, schedule, routes)
+    polls = [p for p in plan_month(2026, 10, schedule, routes) if p.tier != "extra"]  # regular stream, as run_tick does
     local = ZoneInfo("Europe/Brussels")
     due = due_polls(datetime(2026, 10, 7, 7, 18, tzinfo=local), schedule, polls)
     assert due and {p.scheduled_at.strftime("%H:%M") for p in due} == {"07:10"}
@@ -84,3 +84,23 @@ def test_missing_account_key_skips_without_borrowing(tmp_path, monkeypatch):
     result = commute_live.run_tick(now, execute=True, config_dir=ROOT / "config", data_dir=tmp_path)
     assert result["reason"] == "missing_keys" and result["missing_keys"] == ["TOMTOM_API_KEY2"]
     assert calls == [] and not (tmp_path / "commutes").exists()
+
+
+def test_extra_stream_every_five_minutes_from_the_list():
+    schedule, routes = load_plan_inputs()
+    polls = plan_month(2026, 10, schedule, routes)
+    extra = [p for p in polls if p.tier == "extra"]
+    config = schedule["extra_routes"]
+    assert len(extra) == 22 * 2 * 4 * 60 // config["every_minutes"]  # 22 days, two 4-hour windows
+    by_id = {route["id"]: route for route in routes}
+    listed = set(config["routes"])
+    assert all(p.route_id in listed or f"{by_id[p.route_id]['home_area']}__{by_id[p.route_id]['work_area']}" in listed
+               for p in extra)
+    account = schedule["tomtom_accounts"][config["account"]]["id"]
+    assert {p.account for p in extra} == {account}
+    assert {p.direction for p in extra if p.scheduled_at.hour < 12} == {"morning"}
+    assert len({p.route_id for p in extra}) > len(listed)  # town pairs rotate over their places
+    assert extra == [p for p in plan_month(2026, 10, schedule, routes) if p.tier == "extra"]  # reproducible
+    local = ZoneInfo("Europe/Brussels")
+    due = due_polls(datetime(2026, 10, 7, 7, 17, tzinfo=local), schedule, extra)
+    assert [p.scheduled_at.strftime("%H:%M") for p in due] == ["07:15"]

@@ -178,3 +178,20 @@ def test_latest_feed_has_the_ten_newest_calls(tmp_path):
     assert feed[0]["observed_at"] == "2026-10-08T05:10:00+00:00"  # newest first
     assert feed[-1]["observed_at"].startswith("2026-09-07")
     assert all("account" not in row for row in feed)
+
+
+def test_map_summary_uses_both_directions_and_hides_durations():
+    import csv
+    from travelsmart.commute_export import build_map
+    routes = list(csv.DictReader((ROOT / "config" / "commute_routes.csv").open(encoding="utf-8")))
+    catalogue = yaml.safe_load((ROOT / "config" / "commute_catalogue.yaml").read_text(encoding="utf-8"))
+    route = next(r for r in routes if r["home_area"] == "diepenbeek" and r["work_area"] == "brussels")
+    def row(direction, hour, duration):
+        return {"route_id": route["id"], "direction": direction, "status": "ok", "duration_seconds": duration,
+                "freeflow_seconds": 3000, "observed_at": f"2026-10-08T{hour - 2:02d}:05:00+00:00"}
+    travel = [row("morning", 7, d) for d in (3600, 3900, 4200)] + [row("evening", 17, 3300)]
+    data = build_map(routes, catalogue, travel, ROOT / "config", "now")
+    assert data["stats"]["diepenbeek"]["brussels"]["07:00"] == [3, 0.3]   # median 3900 / 3000 - 1
+    assert data["stats"]["brussels"]["diepenbeek"]["17:00"] == [1, 0.1]   # evening runs work -> home
+    assert "brussels" in data["destinations"]["diepenbeek"] and "diepenbeek" in data["destinations"]["brussels"]
+    assert "duration" not in json.dumps(data)

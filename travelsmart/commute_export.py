@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import csv
 import json
-from collections import Counter
-from datetime import datetime, timezone
+from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from statistics import median
+from zoneinfo import ZoneInfo
 
 import yaml
 
@@ -35,7 +37,7 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
         routes = list(csv.DictReader(file))
     schedule = yaml.safe_load((config_dir / "commute_schedule.yaml").read_text(encoding="utf-8"))
     months = sorted(path.stem for path in (data_dir / "commutes").glob("????-??.jsonl"))
-    month_stats, latest = [], []
+    month_stats, latest, all_travel = [], [], []
     for month in months:
         travel = read_observations(data_dir / "commutes" / f"{month}.jsonl")
         weather = {(row["provider"], row.get("account"), row["route_id"], row["observed_at"]): row
@@ -47,6 +49,7 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
                                   "destination": joined["destination"]}
         (output_dir / f"{month}.json").write_text(json.dumps(travel, separators=(",", ":")), encoding="utf-8")
         latest = sorted(latest + travel, key=lambda row: row["observed_at"])[-LATEST_CALLS:]
+        all_travel.extend(travel)
         counts = Counter(row["status"] for row in travel)
         month_stats.append({"month": month, "calls": len(travel), "successful": counts["ok"],
                             "errors": counts["error"], "too_short": counts["too_short"],
@@ -61,4 +64,78 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
     feed = [{key: row[key] for key in LATEST_FIELDS if key in row} for row in reversed(latest)]
     (output_dir / "latest.json").write_text(json.dumps({"generated_at": index["generated_at"], "calls": feed},
                                                        separators=(",", ":")), encoding="utf-8")
+    (output_dir / "map.json").write_text(json.dumps(build_map(routes, catalogue, all_travel, config_dir, index["generated_at"]),
+                                                    separators=(",", ":")), encoding="utf-8")
     return {"months": len(months), "routes": len(routes), "observations": sum(x["calls"] for x in month_stats)}
+
+
+# --- "When is it calm?" map -----------------------------------------------------------
+MAP_BUCKET_MINUTES = 30
+MAP_HOURS = (5, 19)            # buckets from 05:00 up to 18:30
+MAP_MIN_SAMPLES = 3            # fewer measurements: shown as "not enough data yet"
+# Congestion = travel time vs an empty road (provider free-flow time), as a share.
+MAP_LEVELS = [{"id": "calm", "label": "Calm", "below": 0.10},
+              {"id": "moderate", "label": "Moderate", "below": 0.25},
+              {"id": "busy", "label": "Busy", "below": 0.45},
+              {"id": "very_busy", "label": "Very busy", "below": None}]
+
+
+def _bucket(observed_at: str) -> str | None:
+    local = datetime.fromisoformat(observed_at).astimezone(ZoneInfo("Europe/Brussels"))
+    if not MAP_HOURS[0] <= local.hour < MAP_HOURS[1]:
+        return None
+    minute = local.minute - local.minute % MAP_BUCKET_MINUTES
+    return f"{local.hour:02d}:{minute:02d}"
+
+
+def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_dir: Path, generated_at: str) -> dict:
+    """Per start town, destination and half hour: how congested trips usually are.
+
+    Morning measurements run home town -> employment area, evening ones the other way,
+    so a town is a start point for both. Corridor business parks (random-only) are
+    destinations in their own right; everything else is aggregated per town.
+    """
+    anchors = yaml.safe_load((config_dir / "commute_anchors.yaml").read_text(encoding="utf-8"))
+    areas = catalogue["areas"]
+    corridor = {key for key, area in areas.items() if area.get("region") == "corridor"}
+    park_names = {f"{town}.{place['id']}": place["name"] for town, places in catalogue["work_places"].items()
+                  for place in places}
+    work_key = {r["id"]: (r["work_id"] if r["work_area"] in corridor else r["work_area"]) for r in routes}
+    points: dict[str, list] = defaultdict(list)
+    for route in routes:
+        points[route["home_area"]].append(anchors["home"][route["home_id"]])
+        points[work_key[route["id"]]].append(anchors["work"][route["work_id"]])
+    places = {key: {"name": (f"{areas[key.split('.')[0]]['name']} · {park_names[key]}" if "." in key else areas[key]["name"]),
+                    "point": [round(sum(p[0] for p in pts) / len(pts), 5), round(sum(p[1] for p in pts) / len(pts), 5)]}
+              for key, pts in points.items()}
+    origins = sorted({r["home_area"] for r in routes}, key=lambda key: places[key]["name"])
+    destinations: dict[str, set] = defaultdict(set)
+    for route in routes:
+        destinations[route["home_area"]].add(work_key[route["id"]])
+        if work_key[route["id"]] in origins:
+            destinations[work_key[route["id"]]].add(route["home_area"])
+    by_id = {r["id"]: r for r in routes}
+    samples: dict[tuple, list[float]] = defaultdict(list)
+    for row in travel:
+        route = by_id.get(row["route_id"])
+        if not route or row.get("status") != "ok" or not row.get("freeflow_seconds"):
+            continue
+        bucket = _bucket(row["observed_at"])
+        if bucket is None:
+            continue
+        home, work = route["home_area"], work_key[route["id"]]
+        origin, destination = (home, work) if row["direction"] == "morning" else (work, home)
+        if origin in origins:
+            samples[origin, destination, bucket].append(row["duration_seconds"] / row["freeflow_seconds"] - 1)
+    stats: dict[str, dict] = defaultdict(lambda: defaultdict(dict))
+    for (origin, destination, bucket), values in samples.items():
+        stats[origin][destination][bucket] = [len(values), round(max(0.0, median(values)), 3)]
+    buckets = []
+    moment = datetime(2000, 1, 1, MAP_HOURS[0])
+    while moment.hour < MAP_HOURS[1]:
+        buckets.append(moment.strftime("%H:%M"))
+        moment += timedelta(minutes=MAP_BUCKET_MINUTES)
+    return {"generated_at": generated_at, "buckets": buckets, "min_samples": MAP_MIN_SAMPLES, "levels": MAP_LEVELS,
+            "places": places, "origins": origins,
+            "destinations": {o: sorted(destinations[o], key=lambda key: places[key]["name"]) for o in origins},
+            "stats": {o: {d: dict(sorted(b.items())) for d, b in ds.items()} for o, ds in stats.items()}}

@@ -4,6 +4,11 @@ on:
   push:
     branches: [master, main]
   workflow_dispatch:
+    inputs:
+      timer:
+        description: Started by an external timer (behaves like a scheduled run)
+        type: boolean
+        default: false
   schedule:
     # UTC on purpose: the planner works in Brussels time (summer and winter time),
     # so a run with no slot due exits without API calls. 03:00-16:55 UTC covers
@@ -77,8 +82,8 @@ jobs:
 
   publish:
     needs: collect
-    # Code pushes and manual runs always publish; scheduled runs only when they stored data.
-    if: github.event_name != 'schedule' || needs.collect.outputs.changed == 'true'
+    # Pushes and hand-started runs always publish; scheduled and timer runs only when they stored data.
+    if: (github.event_name != 'schedule' && !inputs.timer) || needs.collect.outputs.changed == 'true'
     runs-on: ubuntu-latest
     concurrency:
       group: pages-deploy  # shared with the extra stream; the newest waiting deploy wins

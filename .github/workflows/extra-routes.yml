@@ -5,6 +5,11 @@ name: Extra route stream
 # republishes the dashboard so the latest calls are visible.
 on:
   workflow_dispatch:
+    inputs:
+      timer:
+        description: Started by an external timer (behaves like a scheduled run)
+        type: boolean
+        default: false
   schedule:
     # UTC on purpose (see commutes.yml): runs with nothing due exit without API calls.
     - cron: '*/5 3-16 * * 1-5'

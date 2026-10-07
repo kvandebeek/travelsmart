@@ -1,3 +1,5 @@
 # Observation files are append-only JSON lines written by two workflows.
 # Union merge keeps both sides when concurrent runs append at the same time.
 observations/**/*.jsonl merge=union
+# Shell scripts run on macOS/Linux: always LF.
+*.sh text eol=lf

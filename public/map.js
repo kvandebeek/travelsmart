@@ -227,30 +227,25 @@ function coverage() {
     return {bucket, judged, measured, measurements, trips: state.trips.length};
   });
 }
+// Paint the slider track: one stop per half hour, aligned with the thumb's travel range.
 function renderCoverage() {
-  const bars = coverage(), last = bars.length - 1, box = $('coverage');
+  const bars = coverage(), last = bars.length - 1;
   state.coverage = bars;
-  box.replaceChildren(...bars.map((bar, index) => {
-    const span = document.createElement('span');
-    // Height: share of trips with any measurement here. Darkness: is it enough (and how solid)?
-    const share = bar.trips ? bar.measured / bar.trips : 0;
+  const stops = bars.map((bar, index) => {
     const perTrip = bar.measured ? bar.measurements / bar.measured : 0;
-    span.className = !bar.measurements ? 'none' : bar.judged < bar.measured / 2 ? 'thin' : perTrip >= 10 ? 'good' : 'ok';
-    span.style.left = `${index / last * 100}%`;
-    span.style.width = `calc(${100 / last}% - 2px)`;
-    span.style.height = `${Math.max(12, share * 100)}%`;
-    return span;
-  }));
+    const strength = !bar.measurements ? 0 : bar.judged < bar.measured / 2 ? 0.3 : perTrip >= 10 ? 1 : 0.65;
+    const alpha = (strength * (0.35 + 0.65 * (bar.trips ? bar.measured / bar.trips : 0))).toFixed(2);
+    return `rgb(var(--data-rgb) / ${alpha}) calc(10px + (100% - 20px) * ${(index / last).toFixed(4)})`;
+  });
+  $('time').style.setProperty('--track', `linear-gradient(to right, ${stops.join(', ')}), var(--line)`);
 }
 function renderCoverageNote() {
   if (!state.coverage) return;
-  const index = Math.round(state.t), bar = state.coverage[index];
-  [...$('coverage').children].forEach((span, i) => span.classList.toggle('current', i === index));
-  const trips = bar.trips === 1 ? 'this trip' : `${bar.trips} trips`;
-  $('coverage-note').textContent = !bar.measurements
-    ? `Data around ${bar.bucket}: no measurements yet for ${trips}.`
-    : `Data around ${bar.bucket}: ${bar.measured} of ${bar.trips} ${bar.trips === 1 ? 'trip has' : 'trips have'} measurements ` +
-      `(${bar.measurements} in total), ${bar.judged} with enough to judge (3+). Bars: taller = more trips measured, darker = more solid.`;
+  const bar = state.coverage[Math.round(state.t)];
+  const of = `${bar.measured} of ${bar.trips} ${bar.trips === 1 ? 'trip' : 'trips'} measured`;
+  const time = clock(state.t);  // the nearest measured half hour describes the slider's time
+  $('coverage-note').textContent = !bar.measurements ? `${time} · no data yet`
+    : `${time} · ${of} · ${bar.judged ? `${bar.judged} with enough to judge` : 'none with enough yet (3+ needed)'}`;
 }
 
 // From-view with one destination chosen: the whole day for that trip as one gradient bar.

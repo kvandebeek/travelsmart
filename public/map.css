@@ -5,7 +5,7 @@
   --page: #f3f6f3; --surface: #ffffff; --ink: #172825; --muted: #637771; --line: #d9e3df;
   --accent: #14785e; --chip: #e6f2ec; --chip-ink: #17674f;
   --calm: #0ca30c; --moderate: #fab219; --busy: #ec835a; --very-busy: #d03b3b; --no-data: #898781;
-  --ring: #ffffff; --you: #172825;
+  --ring: #ffffff; --you: #172825; --data-rgb: 99 119 113;
   /* Travel time: one blue ramp, short = light, long = dark (validated, ordinal). */
   --t1: #86b6ef; --t2: #5598e7; --t3: #2a78d6; --t4: #1c5cab; --t5: #0d366b;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -14,14 +14,14 @@
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --muted: #c3c2b7; --line: #2c2c2a;
-    --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff;
+    --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff; --data-rgb: 195 194 183;
     --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #86b6ef; --t5: #cde2fb;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --muted: #c3c2b7; --line: #2c2c2a;
-  --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff;
+  --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff; --data-rgb: 195 194 183;
     --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #86b6ef; --t5: #cde2fb;
 }
 
@@ -57,17 +57,23 @@ select { width: 100%; min-width: 0; text-overflow: ellipsis; font: inherit; font
 .time-head { display: flex; align-items: baseline; gap: 10px; color: var(--muted); font-weight: 650; font-size: .85rem; }
 .time-head strong { color: var(--ink); font-size: 1.6rem; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
 .time-head button { margin-left: auto; font: inherit; font-weight: 700; color: var(--chip-ink); background: var(--chip); border: 0; border-radius: 20px; padding: 7px 14px; cursor: pointer; }
-input[type=range] { width: 100%; accent-color: var(--accent); margin: 10px 0 2px; }
-/* Data coverage under the slider: neutral ink, so it never reads as busy/calm.
-   Height = share of shown trips with enough data; strength = how many measurements. */
-.coverage { position: relative; height: 28px; margin: 2px 9px 4px; border-bottom: 1px solid var(--line); }
-.coverage span { position: absolute; bottom: 0; transform: translateX(-50%); border-radius: 2px 2px 0 0; background: var(--ink); }
-.coverage span.thin { opacity: .3; }
-.coverage span.ok { opacity: .55; }
-.coverage span.good { opacity: .9; }
-.coverage span.none { height: 0 !important; border-bottom: 2px dashed var(--muted); background: none; opacity: .6; }
-.coverage span.current { box-shadow: 0 0 0 2px var(--accent); }
-.coverage-note { color: var(--muted); font-size: .82rem; margin: 6px 0 0; }
+/* Slider: the track itself shows how much data there is along the day (pale = none,
+   darker = more and more solid), like a video's buffered bar. Neutral, never busy/calm colours. */
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 24px; margin: 8px 0 2px;
+  background: transparent; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: var(--track, var(--line)); }
+input[type=range]::-moz-range-track { height: 8px; border-radius: 4px; background: var(--track, var(--line)); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -6px; border-radius: 50%;
+  background: var(--accent); border: 3px solid var(--surface); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
+input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+  border: 3px solid var(--surface); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); }
+input[type=range]:focus-visible { outline: none; }
+input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--chip), 0 0 0 5px var(--accent); }
+input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--chip), 0 0 0 5px var(--accent); }
+.coverage-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: var(--muted); font-size: .8rem; margin: 6px 0 0; }
+.data-key { display: inline-flex; align-items: center; gap: 6px; }
+.data-chip { width: 34px; height: 6px; border-radius: 3px; display: inline-block;
+  background: linear-gradient(to right, var(--line), rgb(var(--data-rgb) / 1)); }
 .ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
 
 .map-panel { padding: 0; overflow: hidden; }

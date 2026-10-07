@@ -1,0 +1,370 @@
+{
+ "liege_ghent": {
+  "name": "Liège – Ghent (E313 · E314 · E40)",
+  "forward": {
+   "nodes": [
+    {
+     "id": "liege",
+     "name": "Liège",
+     "point": [
+      50.60911,
+      5.57714
+     ]
+    },
+    {
+     "id": "tongeren",
+     "name": "Tongeren",
+     "point": [
+      50.800214,
+      5.522353
+     ]
+    },
+    {
+     "id": "bilzen",
+     "name": "Bilzen",
+     "point": [
+      50.862904,
+      5.496992
+     ]
+    },
+    {
+     "id": "diepenbeek",
+     "name": "Diepenbeek",
+     "point": [
+      50.895064,
+      5.406003
+     ]
+    },
+    {
+     "id": "hasselt",
+     "name": "Hasselt",
+     "point": [
+      50.919515,
+      5.318063
+     ]
+    },
+    {
+     "id": "lummen",
+     "name": "Lummen",
+     "point": [
+      50.994676,
+      5.190267
+     ]
+    },
+    {
+     "id": "diest",
+     "name": "Diest",
+     "point": [
+      50.961328,
+      5.07432
+     ]
+    },
+    {
+     "id": "aarschot",
+     "name": "Aarschot",
+     "point": [
+      50.964572,
+      4.836473
+     ]
+    },
+    {
+     "id": "leuven",
+     "name": "Leuven",
+     "point": [
+      50.896739,
+      4.693306
+     ]
+    },
+    {
+     "id": "brussels",
+     "name": "Brussels ring",
+     "point": [
+      50.887395,
+      4.291142
+     ]
+    },
+    {
+     "id": "aalst",
+     "name": "Aalst",
+     "point": [
+      50.916712,
+      4.036319
+     ]
+    },
+    {
+     "id": "ghent",
+     "name": "Ghent",
+     "point": [
+      51.04917,
+      3.71944
+     ]
+    }
+   ],
+   "expected_leg_m": [
+    24477,
+    7229,
+    7500,
+    6905,
+    13930,
+    9069,
+    17867,
+    12956,
+    34614,
+    19369,
+    32550
+   ]
+  },
+  "reverse": {
+   "nodes": [
+    {
+     "id": "ghent",
+     "name": "Ghent",
+     "point": [
+      51.04917,
+      3.71944
+     ]
+    },
+    {
+     "id": "aalst",
+     "name": "Aalst",
+     "point": [
+      50.916538,
+      4.036356
+     ]
+    },
+    {
+     "id": "brussels",
+     "name": "Brussels ring",
+     "point": [
+      50.8799,
+      4.281101
+     ]
+    },
+    {
+     "id": "leuven",
+     "name": "Leuven",
+     "point": [
+      50.896739,
+      4.693534
+     ]
+    },
+    {
+     "id": "aarschot",
+     "name": "Aarschot",
+     "point": [
+      50.964447,
+      4.836501
+     ]
+    },
+    {
+     "id": "diest",
+     "name": "Diest",
+     "point": [
+      50.961153,
+      5.07443
+     ]
+    },
+    {
+     "id": "lummen",
+     "name": "Lummen",
+     "point": [
+      50.994189,
+      5.189309
+     ]
+    },
+    {
+     "id": "hasselt",
+     "name": "Hasselt",
+     "point": [
+      50.91942,
+      5.317958
+     ]
+    },
+    {
+     "id": "diepenbeek",
+     "name": "Diepenbeek",
+     "point": [
+      50.894848,
+      5.406049
+     ]
+    },
+    {
+     "id": "bilzen",
+     "name": "Bilzen",
+     "point": [
+      50.862829,
+      5.496707
+     ]
+    },
+    {
+     "id": "tongeren",
+     "name": "Tongeren",
+     "point": [
+      50.800112,
+      5.522088
+     ]
+    },
+    {
+     "id": "liege",
+     "name": "Liège",
+     "point": [
+      50.60911,
+      5.57714
+     ]
+    }
+   ],
+   "expected_leg_m": [
+    32160,
+    18611,
+    36587,
+    12937,
+    17877,
+    8986,
+    13526,
+    6924,
+    7471,
+    7232,
+    26348
+   ]
+  }
+ },
+ "e314": {
+  "name": "E314 Leuven – Maasmechelen",
+  "forward": {
+   "nodes": [
+    {
+     "id": "leuven",
+     "name": "Leuven",
+     "point": [
+      50.86495,
+      4.70212
+     ]
+    },
+    {
+     "id": "aarschot",
+     "name": "Aarschot",
+     "point": [
+      50.964447,
+      4.836501
+     ]
+    },
+    {
+     "id": "diest",
+     "name": "Diest",
+     "point": [
+      50.961153,
+      5.07443
+     ]
+    },
+    {
+     "id": "lummen",
+     "name": "Lummen",
+     "point": [
+      50.994189,
+      5.189309
+     ]
+    },
+    {
+     "id": "houthalen",
+     "name": "Houthalen-Helchteren",
+     "point": [
+      51.012301,
+      5.384518
+     ]
+    },
+    {
+     "id": "genk",
+     "name": "Genk",
+     "point": [
+      50.989033,
+      5.510885
+     ]
+    },
+    {
+     "id": "maasmechelen",
+     "name": "Maasmechelen",
+     "point": [
+      50.96706,
+      5.69798
+     ]
+    }
+   ],
+   "expected_leg_m": [
+    18623,
+    17877,
+    8986,
+    13925,
+    9329,
+    15551
+   ]
+  },
+  "reverse": {
+   "nodes": [
+    {
+     "id": "maasmechelen",
+     "name": "Maasmechelen",
+     "point": [
+      50.96706,
+      5.69798
+     ]
+    },
+    {
+     "id": "genk",
+     "name": "Genk",
+     "point": [
+      50.989738,
+      5.509362
+     ]
+    },
+    {
+     "id": "houthalen",
+     "name": "Houthalen-Helchteren",
+     "point": [
+      51.012492,
+      5.384549
+     ]
+    },
+    {
+     "id": "lummen",
+     "name": "Lummen",
+     "point": [
+      50.994676,
+      5.190267
+     ]
+    },
+    {
+     "id": "diest",
+     "name": "Diest",
+     "point": [
+      50.961328,
+      5.07432
+     ]
+    },
+    {
+     "id": "aarschot",
+     "name": "Aarschot",
+     "point": [
+      50.964572,
+      4.836473
+     ]
+    },
+    {
+     "id": "leuven",
+     "name": "Leuven",
+     "point": [
+      50.86495,
+      4.70212
+     ]
+    }
+   ],
+   "expected_leg_m": [
+    15347,
+    9206,
+    13853,
+    9069,
+    17867,
+    17926
+   ]
+  }
+ }
+}

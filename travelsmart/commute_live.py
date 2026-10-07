@@ -74,7 +74,7 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
     if provider not in ("tomtom", "here"):
         raise ValueError(f"Unknown provider: {provider}")
     schedule, routes = load_plan_inputs(config_dir, active_only=True)
-    if provider == "here" and schedule["here_daily_limit"] <= 0:
+    if provider == "here" and (schedule["here_daily_limit"] <= 0 or schedule.get("here_monthly_limit", 0) <= 0):
         return {"due": 0, "attempted": 0, "stored": 0, "reason": "here_disabled"}
     local = now.astimezone(ZoneInfo(schedule["timezone"]))
     polls = due_polls(now, schedule, plan_month(local.year, local.month, schedule, routes))
@@ -87,7 +87,10 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
     needed_keys = ({accounts[poll.account]["key_env"] for poll in polls} if provider == "tomtom" else {"HERE_API_KEY"})
     missing_keys = [name for name in needed_keys if not os.getenv(name)]
     if missing_keys:
-        raise RuntimeError(f"Missing live API key environment variables: {', '.join(sorted(missing_keys))}")
+        # Skip rather than fail, and never borrow another account's key: each
+        # account's monthly budget only covers its own slots.
+        return {"due": len(polls), "attempted": 0, "stored": 0, "reason": "missing_keys",
+                "missing_keys": sorted(missing_keys)}
     anchors = yaml.safe_load((config_dir / "commute_anchors.yaml").read_text(encoding="utf-8"))
     snapshot = None
     if provider == "tomtom":
@@ -105,6 +108,7 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
     here_used_today = sum(row["provider"] == "here" and
                           datetime.fromisoformat(row["observed_at"]).astimezone(ZoneInfo(schedule["timezone"])).date() == local.date()
                           for row in existing)
+    here_used_month = sum(row["provider"] == "here" for row in existing)  # one file per month
     attempts = stored = 0
     for poll in polls:
         account_id = poll.account if provider == "tomtom" else "here"
@@ -115,7 +119,8 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
             account_config = accounts[account_id]
             if monthly_used[account_id] >= account_config["monthly_limit"] - account_config["reserve"]:
                 break
-        if provider == "here" and here_used_today >= schedule["here_daily_limit"]:
+        if provider == "here" and (here_used_today >= schedule["here_daily_limit"]
+                                   or here_used_month >= schedule["here_monthly_limit"]):
             break
         route = route_map[poll.route_id]
         home = anchors["home"][route["home_area"]]
@@ -130,6 +135,7 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False,
             monthly_used[account_id] += 1
         else:
             here_used_today += 1
+            here_used_month += 1
         try:
             key = os.environ[accounts[account_id]["key_env"]] if provider == "tomtom" else os.environ["HERE_API_KEY"]
             result = fetch_live_route(provider, origin, destination, key)

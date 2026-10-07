@@ -38,6 +38,8 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
                             "weather_joined": sum("weather" in row for row in travel)})
     budgets = {item["id"]: {"monthly_limit": item["monthly_limit"], "reserve": item["reserve"]}
                for item in schedule["tomtom_accounts"].values()}
+    if schedule.get("here_monthly_limit"):
+        budgets["here"] = {"monthly_limit": schedule["here_monthly_limit"], "reserve": 0}
     index = {"generated_at": datetime.now(timezone.utc).isoformat(), "routes": routes,
              "account_budgets": budgets,
              "months": month_stats, "weather_source": "Open-Meteo historical reanalysis"}

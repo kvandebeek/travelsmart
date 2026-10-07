@@ -1,13 +1,531 @@
-# Add verified, public-road-access coordinates before collecting live data.
-# Coordinates are [latitude, longitude]. The existing municipal-centre points
-# in locations.yaml are deliberately not used as commute endpoints.
-# Example shape (illustrative only; do not uncomment without verification):
-# home:
-#   diepenbeek: [50.0, 5.0]
-# work:
-#   brussels_european: [50.0, 4.0]
-# validated_routes:
-#   diepenbeek__brussels_european: {road_distance_km: 80.0}
-home: {}
-work: {}
-validated_routes: {}
+# Verified, road-snapped commute endpoints. Coordinates are [latitude, longitude].
+# Home points are residential neighbourhoods; work points are employment areas.
+# Method (2026-10-07): OpenStreetMap Nominatim lookup of the catalogue's named
+# place, manual review (no train stations as homes, hits within ~14 km of the
+# area), then snapped to the nearest drivable road with OSRM `nearest`.
+# validated_routes holds the OSRM road distance home -> work; routes under the
+# 12 km cutoff are left out and are therefore never collected.
+# Regenerate after changing a point; a route without an entry stays inactive.
+home:
+  aalst: [50.961126, 4.034242]  # Hofstade, Aalst -> Hofstade-Dorp, snapped 16 m
+  antwerp: [51.212676, 4.446665]  # Borgerhout, Antwerpen -> unnamed road, snapped 35 m
+  beringen: [51.069822, 5.270236]  # Koersel, Beringen -> unnamed road, snapped 61 m
+  bilzen: [50.868256, 5.499538]  # Merem hamlet -> unnamed road, snapped 6 m
+  bruges: [51.192427, 3.177799]  # Sint-Andries, Brugge -> unnamed road, snapped 47 m
+  brussels_centre: [50.852385, 4.343216]  # Rue Antoine Dansaert, Bruxelles -> Rue Antoine Dansaert - Antoine Dansaertstraat, snapped 0 m
+  brussels_european: [50.835941, 4.386179]  # Etterbeek, Bruxelles -> Chaussée Saint-Pierre - Sint-Pieterssteenweg, snapped 23 m
+  brussels_midi: [50.830469, 4.342269]  # Saint-Gilles - Sint-Gillis (administrative) -> Rue d'Andenne - Andennestraat, snapped 2 m
+  brussels_north: [50.882715, 4.349695]  # Laeken, Bruxelles -> Rue des Horticulteurs - Tuinbouwersstraat, snapped 102 m
+  brussels_west: [50.844016, 4.313073]  # Scheut, Anderlecht -> Square des Vétérans Coloniaux - Koloniale Veteranensquare, snapped 14 m
+  charleroi: [50.423706, 4.479606]  # Gilly, Charleroi -> Impasse du Major, snapped 9 m
+  diepenbeek: [50.936764, 5.418576]  # Rooierheide, Diepenbeek -> Patersplein, snapped 24 m
+  geel: [51.16331, 4.975866]  # Elsum, Geel -> Dokter-Peetersstraat, snapped 4 m
+  genk: [50.977147, 5.486059]  # Winterslag, Genk (village) -> unnamed road, snapped 15 m
+  ghent: [51.061866, 3.748774]  # Sint-Amandsberg, Gent -> Visitatiestraat, snapped 7 m
+  halle: [50.74128, 4.2494]  # Buizingen, Halle -> Gemeenteplein, snapped 7 m
+  hamont_achel: [51.254799, 5.480206]  # Achel, Hamont-Achel -> Michielsplein, snapped 5 m
+  hasselt: [50.954334, 5.349273]  # Kiewit, Hasselt -> unnamed road, snapped 19 m
+  ieper: [50.864797, 2.904559]  # Sint-Jan, Ieper -> Potijzestraat, snapped 12 m
+  kinrooi: [51.150992, 5.819968]  # Kessenich, Kinrooi -> Linssenhof, snapped 39 m
+  kortrijk: [50.807045, 3.233623]  # Marke, Kortrijk -> Markeplaats, snapped 0 m
+  leuven: [50.884776, 4.731477]  # Kessel-Lo, Leuven -> Diestsesteenweg, snapped 53 m
+  liege: [50.619254, 5.604844]  # Grivegnée, Liège -> Rue Dessus l'Église, snapped 7 m
+  lommel: [51.229581, 5.283225]  # Heeserbergen, Lommel -> Frederik Van Eedenstraat, snapped 27 m
+  maaseik: [51.088729, 5.705212]  # Neeroeteren, Maaseik -> Langerenstraat, snapped 18 m
+  maasmechelen: [50.986294, 5.713118]  # Eisden, Maasmechelen -> unnamed road, snapped 19 m
+  mechelen: [51.030821, 4.491888]  # Nekkerspoelstraat, Nekkerspoel -> Nekkerspoelstraat, snapped 0 m
+  mol: [51.196962, 5.128363]  # Ginderbuiten hamlet -> Brandstraat, snapped 7 m
+  mons: [50.476034, 3.955376]  # Nimy, Mons -> Rue des Viaducs, snapped 57 m
+  namur: [50.458961, 4.872315]  # Jambes, Namur -> unnamed road, snapped 1 m
+  oostende: [51.202519, 2.914733]  # Stene, Oostende -> Stenedorpstraat, snapped 17 m
+  roeselare: [50.968753, 3.144257]  # Beveren, Roeselare -> Sint-Germanusplein, snapped 7 m
+  sint_niklaas: [51.193382, 4.17797]  # Nieuwkerken-Waas, Sint-Niklaas -> unnamed road, snapped 4 m
+  tournai: [50.638051, 3.382614]  # Kain, Tournai -> Rue des Déportés de Kain, snapped 19 m
+  turnhout: [51.305588, 4.957566]  # Schorvoort, Turnhout -> Oude Dijk, snapped 7 m
+  vilvoorde: [50.905838, 4.376283]  # Koningslo, Vilvoorde -> Steenstraat, snapped 28 m
+  wavre: [50.703071, 4.560043]  # Limal, Wavre -> Rue Champêtre, snapped 75 m
+work:
+  aalst: [50.912368, 4.036715]  # Industrielaan, Erembodegem -> Industrielaan, snapped 0 m
+  antwerp: [51.199554, 4.432726]  # Station Antwerpen-Berchem -> Binnensingel, snapped 32 m
+  beringen: [51.052632, 5.179566]  # Industrieweg, Beringen -> Industrieweg, snapped 0 m
+  bilzen: [50.869919, 5.529292]  # Spelver, Bilzen -> Kapittelstraat, snapped 16 m
+  bruges: [51.216211, 3.19211]  # Waggelwater, Brugge -> unnamed road, snapped 78 m
+  brussels_centre: [50.837805, 4.318655]  # Gare de Bruxelles-Central -> Rue de l'Ancienne Gare - Oudstationsstraat, snapped 14 m
+  brussels_european: [50.842638, 4.383221]  # Rond-point Schuman, Bruxelles -> Rue de la Loi - Wetstraat, snapped 11 m
+  brussels_midi: [50.835552, 4.337653]  # Gare de Bruxelles-Midi -> Avenue Fonsny - Fonsnylaan, snapped 72 m
+  brussels_north: [50.860303, 4.360536]  # Gare de Bruxelles-Nord -> unnamed road, snapped 33 m
+  brussels_west: [50.813668, 4.264211]  # Hôpital Erasme, Anderlecht -> unnamed road, snapped 55 m
+  charleroi: [50.473183, 4.465165]  # Aéropole, Gosselies -> Rue Adrienne Bolland, snapped 28 m
+  diepenbeek: [50.929207, 5.39048]  # Wetenschapspark, Diepenbeek -> Wetenschapspark, snapped 0 m
+  geel: [51.168587, 5.024826]  # Kievermont, Geel -> Kievermondeveld, snapped 3 m
+  genk: [50.951018, 5.483294]  # Genk-Zuid, Genk -> unnamed road, snapped 9 m
+  ghent: [51.02651, 3.689266]  # The Loop, Gent -> Maaltekouter, snapped 52 m
+  halle: [50.713456, 4.22302]  # Lembeek, Halle -> Claesplein, snapped 10 m
+  hamont_achel: [51.246918, 5.509831]  # Hamont industrial area (Bosstraat) -> Bosstraat, snapped 3 m
+  hasselt: [50.953033, 5.354607]  # Corda Campus, Hasselt -> unnamed road, snapped 27 m
+  ieper: [50.878403, 2.885409]  # Ieperleekanaal, Ieper -> Sint-Krispijnstraat, snapped 8 m
+  kinrooi: [51.138109, 5.818887]  # Agropolis, Kinrooi -> unnamed road, snapped 24 m
+  kortrijk: [50.799409, 3.275413]  # Kennedypark, Kortrijk -> unnamed road, snapped 1 m
+  leuven: [50.846082, 4.722403]  # Researchpark Haasrode -> unnamed road, snapped 108 m
+  liege: [50.624348, 5.565791]  # Gare de Liège-Guillemins -> Rue Serrurier-Bovy, snapped 35 m
+  lommel: [51.203356, 5.251291]  # Kristalpark, Lommel -> Marie Popelinstraat, snapped 368 m
+  maaseik: [51.10677, 5.751528]  # Jagersborg, Maaseik -> unnamed road, snapped 30 m
+  maasmechelen: [50.946537, 5.700246]  # Oude Bunders industrial area -> unnamed road, snapped 161 m
+  mechelen: [51.044008, 4.469786]  # Mechelen-Noord -> Antwerpsesteenweg, snapped 18 m
+  mol: [51.203226, 5.162982]  # Berkebossen, Mol -> Berkebossenlaan, snapped 0 m
+  mons: [50.457882, 3.925889]  # Initialis, Mons -> Rue Galilée, snapped 2 m
+  namur: [50.484996, 4.805756]  # Ecolys, Namur -> Rue de l'Énergie, snapped 7 m
+  oostende: [51.209709, 3.004131]  # Plassendale, Oostende -> Plassendale, snapped 8 m
+  roeselare: [50.972471, 3.131138]  # Industrieweg business area, west Roeselare -> Industrieweg, snapped 1 m
+  sint_niklaas: [51.160215, 4.170648]  # Europark-Zuid, Sint-Niklaas -> Europark-Zuid, snapped 7 m
+  tournai: [50.621123, 3.354343]  # Froyennes, Tournai -> Place de Froyennes, snapped 5 m
+  turnhout: [51.29291, 4.929107]  # Veedijk, Turnhout -> Veedijk, snapped 0 m
+  vilvoorde: [50.946972, 4.437403]  # Cargovil, Vilvoorde -> unnamed road, snapped 9 m
+  wavre: [50.734458, 4.590702]  # Avenue Lavoisier, Wavre -> Avenue Lavoisier, snapped 0 m
+validated_routes:
+  aalst__antwerp: {road_distance_km: 49.2}
+  aalst__bruges: {road_distance_km: 77.2}
+  aalst__brussels_centre: {road_distance_km: 31.5}
+  aalst__brussels_european: {road_distance_km: 34.9}
+  aalst__brussels_midi: {road_distance_km: 33.2}
+  aalst__brussels_north: {road_distance_km: 31.4}
+  aalst__brussels_west: {road_distance_km: 32.4}
+  aalst__ghent: {road_distance_km: 34.7}
+  aalst__halle: {road_distance_km: 47.6}
+  aalst__kortrijk: {road_distance_km: 72.1}
+  aalst__leuven: {road_distance_km: 63.5}
+  aalst__sint_niklaas: {road_distance_km: 30.4}
+  antwerp__aalst: {road_distance_km: 62.8}
+  antwerp__brussels_centre: {road_distance_km: 50.8}
+  antwerp__brussels_european: {road_distance_km: 50.1}
+  antwerp__brussels_north: {road_distance_km: 44.4}
+  antwerp__geel: {road_distance_km: 52.0}
+  antwerp__ghent: {road_distance_km: 65.7}
+  antwerp__hasselt: {road_distance_km: 83.2}
+  antwerp__leuven: {road_distance_km: 64.1}
+  antwerp__mechelen: {road_distance_km: 21.9}
+  antwerp__sint_niklaas: {road_distance_km: 27.6}
+  antwerp__turnhout: {road_distance_km: 45.9}
+  antwerp__vilvoorde: {road_distance_km: 36.5}
+  beringen__antwerp: {road_distance_km: 65.0}
+  beringen__bilzen: {road_distance_km: 44.7}
+  beringen__brussels_european: {road_distance_km: 77.7}
+  beringen__diepenbeek: {road_distance_km: 23.7}
+  beringen__geel: {road_distance_km: 29.0}
+  beringen__genk: {road_distance_km: 29.2}
+  beringen__hamont_achel: {road_distance_km: 35.8}
+  beringen__leuven: {road_distance_km: 67.3}
+  beringen__liege: {road_distance_km: 71.1}
+  beringen__lommel: {road_distance_km: 25.9}
+  beringen__maasmechelen: {road_distance_km: 39.7}
+  beringen__mol: {road_distance_km: 22.7}
+  bilzen__beringen: {road_distance_km: 35.3}
+  bilzen__brussels_european: {road_distance_km: 95.0}
+  bilzen__brussels_north: {road_distance_km: 98.1}
+  bilzen__hamont_achel: {road_distance_km: 60.7}
+  bilzen__kinrooi: {road_distance_km: 47.9}
+  bilzen__leuven: {road_distance_km: 84.6}
+  bilzen__liege: {road_distance_km: 32.6}
+  bilzen__lommel: {road_distance_km: 63.8}
+  bilzen__maaseik: {road_distance_km: 38.8}
+  bilzen__maasmechelen: {road_distance_km: 22.9}
+  bilzen__mol: {road_distance_km: 58.4}
+  bilzen__namur: {road_distance_km: 89.3}
+  bruges__aalst: {road_distance_km: 73.0}
+  bruges__antwerp: {road_distance_km: 106.6}
+  bruges__brussels_european: {road_distance_km: 100.7}
+  bruges__brussels_north: {road_distance_km: 97.3}
+  bruges__ghent: {road_distance_km: 48.1}
+  bruges__ieper: {road_distance_km: 68.9}
+  bruges__kortrijk: {road_distance_km: 54.2}
+  bruges__leuven: {road_distance_km: 129.3}
+  bruges__oostende: {road_distance_km: 15.8}
+  bruges__roeselare: {road_distance_km: 33.3}
+  bruges__sint_niklaas: {road_distance_km: 87.9}
+  bruges__tournai: {road_distance_km: 76.9}
+  brussels_centre__aalst: {road_distance_km: 26.2}
+  brussels_centre__antwerp: {road_distance_km: 44.1}
+  brussels_centre__charleroi: {road_distance_km: 56.2}
+  brussels_centre__genk: {road_distance_km: 98.2}
+  brussels_centre__ghent: {road_distance_km: 55.1}
+  brussels_centre__hasselt: {road_distance_km: 86.8}
+  brussels_centre__kortrijk: {road_distance_km: 92.5}
+  brussels_centre__leuven: {road_distance_km: 31.9}
+  brussels_centre__mechelen: {road_distance_km: 36.6}
+  brussels_centre__namur: {road_distance_km: 74.1}
+  brussels_centre__sint_niklaas: {road_distance_km: 45.4}
+  brussels_centre__wavre: {road_distance_km: 35.6}
+  brussels_european__aalst: {road_distance_km: 29.8}
+  brussels_european__antwerp: {road_distance_km: 49.6}
+  brussels_european__charleroi: {road_distance_km: 48.5}
+  brussels_european__genk: {road_distance_km: 93.9}
+  brussels_european__ghent: {road_distance_km: 58.7}
+  brussels_european__hasselt: {road_distance_km: 82.5}
+  brussels_european__kortrijk: {road_distance_km: 96.1}
+  brussels_european__leuven: {road_distance_km: 27.6}
+  brussels_european__mechelen: {road_distance_km: 32.3}
+  brussels_european__namur: {road_distance_km: 62.1}
+  brussels_european__sint_niklaas: {road_distance_km: 56.9}
+  brussels_european__wavre: {road_distance_km: 23.7}
+  brussels_midi__aalst: {road_distance_km: 32.8}
+  brussels_midi__antwerp: {road_distance_km: 53.0}
+  brussels_midi__charleroi: {road_distance_km: 53.2}
+  brussels_midi__genk: {road_distance_km: 97.4}
+  brussels_midi__ghent: {road_distance_km: 61.7}
+  brussels_midi__hasselt: {road_distance_km: 85.9}
+  brussels_midi__kortrijk: {road_distance_km: 99.1}
+  brussels_midi__leuven: {road_distance_km: 31.0}
+  brussels_midi__mechelen: {road_distance_km: 35.8}
+  brussels_midi__namur: {road_distance_km: 65.8}
+  brussels_midi__sint_niklaas: {road_distance_km: 49.7}
+  brussels_midi__wavre: {road_distance_km: 27.4}
+  brussels_north__aalst: {road_distance_km: 27.1}
+  brussels_north__antwerp: {road_distance_km: 40.3}
+  brussels_north__charleroi: {road_distance_km: 65.4}
+  brussels_north__genk: {road_distance_km: 99.1}
+  brussels_north__ghent: {road_distance_km: 56.0}
+  brussels_north__hasselt: {road_distance_km: 87.7}
+  brussels_north__kortrijk: {road_distance_km: 93.4}
+  brussels_north__leuven: {road_distance_km: 32.8}
+  brussels_north__mechelen: {road_distance_km: 32.0}
+  brussels_north__namur: {road_distance_km: 74.9}
+  brussels_north__sint_niklaas: {road_distance_km: 41.6}
+  brussels_north__wavre: {road_distance_km: 36.5}
+  brussels_west__aalst: {road_distance_km: 25.8}
+  brussels_west__antwerp: {road_distance_km: 49.5}
+  brussels_west__charleroi: {road_distance_km: 55.8}
+  brussels_west__genk: {road_distance_km: 99.8}
+  brussels_west__ghent: {road_distance_km: 54.7}
+  brussels_west__hasselt: {road_distance_km: 88.4}
+  brussels_west__kortrijk: {road_distance_km: 92.1}
+  brussels_west__leuven: {road_distance_km: 33.4}
+  brussels_west__mechelen: {road_distance_km: 40.5}
+  brussels_west__namur: {road_distance_km: 69.2}
+  brussels_west__oostende: {road_distance_km: 104.9}
+  brussels_west__sint_niklaas: {road_distance_km: 50.8}
+  brussels_west__wavre: {road_distance_km: 30.8}
+  charleroi__brussels_centre: {road_distance_km: 57.4}
+  charleroi__brussels_european: {road_distance_km: 63.0}
+  charleroi__brussels_midi: {road_distance_km: 58.1}
+  charleroi__brussels_north: {road_distance_km: 65.3}
+  charleroi__ghent: {road_distance_km: 110.0}
+  charleroi__halle: {road_distance_km: 48.7}
+  charleroi__hasselt: {road_distance_km: 129.3}
+  charleroi__leuven: {road_distance_km: 74.9}
+  charleroi__liege: {road_distance_km: 88.0}
+  charleroi__mons: {road_distance_km: 49.2}
+  charleroi__namur: {road_distance_km: 27.8}
+  charleroi__wavre: {road_distance_km: 60.4}
+  diepenbeek__beringen: {road_distance_km: 26.3}
+  diepenbeek__brussels_european: {road_distance_km: 85.9}
+  diepenbeek__brussels_north: {road_distance_km: 89.0}
+  diepenbeek__hamont_achel: {road_distance_km: 48.4}
+  diepenbeek__kinrooi: {road_distance_km: 44.5}
+  diepenbeek__leuven: {road_distance_km: 75.5}
+  diepenbeek__liege: {road_distance_km: 44.3}
+  diepenbeek__lommel: {road_distance_km: 51.5}
+  diepenbeek__maaseik: {road_distance_km: 35.4}
+  diepenbeek__maasmechelen: {road_distance_km: 26.0}
+  diepenbeek__mol: {road_distance_km: 49.3}
+  diepenbeek__namur: {road_distance_km: 100.9}
+  geel__antwerp: {road_distance_km: 43.6}
+  geel__beringen: {road_distance_km: 26.1}
+  geel__brussels_european: {road_distance_km: 67.8}
+  geel__brussels_north: {road_distance_km: 86.3}
+  geel__diepenbeek: {road_distance_km: 50.5}
+  geel__genk: {road_distance_km: 57.7}
+  geel__hamont_achel: {road_distance_km: 44.8}
+  geel__hasselt: {road_distance_km: 46.1}
+  geel__leuven: {road_distance_km: 57.4}
+  geel__lommel: {road_distance_km: 26.6}
+  geel__mechelen: {road_distance_km: 63.8}
+  geel__turnhout: {road_distance_km: 17.8}
+  genk__beringen: {road_distance_km: 30.8}
+  genk__brussels_european: {road_distance_km: 90.3}
+  genk__brussels_north: {road_distance_km: 93.4}
+  genk__geel: {road_distance_km: 51.5}
+  genk__hamont_achel: {road_distance_km: 36.7}
+  genk__kinrooi: {road_distance_km: 37.7}
+  genk__leuven: {road_distance_km: 79.9}
+  genk__liege: {road_distance_km: 49.2}
+  genk__lommel: {road_distance_km: 49.2}
+  genk__maaseik: {road_distance_km: 28.6}
+  genk__mol: {road_distance_km: 54.5}
+  genk__namur: {road_distance_km: 105.8}
+  ghent__aalst: {road_distance_km: 32.6}
+  ghent__antwerp: {road_distance_km: 59.2}
+  ghent__bruges: {road_distance_km: 54.9}
+  ghent__brussels_centre: {road_distance_km: 56.8}
+  ghent__brussels_european: {road_distance_km: 60.2}
+  ghent__brussels_midi: {road_distance_km: 58.6}
+  ghent__brussels_north: {road_distance_km: 56.8}
+  ghent__charleroi: {road_distance_km: 107.2}
+  ghent__kortrijk: {road_distance_km: 49.6}
+  ghent__leuven: {road_distance_km: 88.8}
+  ghent__roeselare: {road_distance_km: 56.0}
+  ghent__sint_niklaas: {road_distance_km: 40.5}
+  halle__aalst: {road_distance_km: 38.5}
+  halle__antwerp: {road_distance_km: 62.1}
+  halle__charleroi: {road_distance_km: 43.0}
+  halle__ghent: {road_distance_km: 67.3}
+  halle__kortrijk: {road_distance_km: 98.9}
+  halle__leuven: {road_distance_km: 46.3}
+  halle__mechelen: {road_distance_km: 53.1}
+  halle__mons: {road_distance_km: 56.2}
+  halle__namur: {road_distance_km: 68.7}
+  halle__sint_niklaas: {road_distance_km: 63.4}
+  halle__vilvoorde: {road_distance_km: 35.5}
+  halle__wavre: {road_distance_km: 50.8}
+  hamont_achel__antwerp: {road_distance_km: 84.2}
+  hamont_achel__beringen: {road_distance_km: 40.4}
+  hamont_achel__brussels_european: {road_distance_km: 111.0}
+  hamont_achel__genk: {road_distance_km: 39.2}
+  hamont_achel__hasselt: {road_distance_km: 41.3}
+  hamont_achel__kinrooi: {road_distance_km: 35.7}
+  hamont_achel__leuven: {road_distance_km: 100.6}
+  hamont_achel__liege: {road_distance_km: 90.3}
+  hamont_achel__lommel: {road_distance_km: 21.6}
+  hamont_achel__maaseik: {road_distance_km: 32.9}
+  hamont_achel__maasmechelen: {road_distance_km: 59.5}
+  hamont_achel__mol: {road_distance_km: 26.9}
+  hasselt__brussels_european: {road_distance_km: 81.3}
+  hasselt__brussels_north: {road_distance_km: 84.5}
+  hasselt__geel: {road_distance_km: 42.4}
+  hasselt__hamont_achel: {road_distance_km: 41.0}
+  hasselt__kinrooi: {road_distance_km: 52.2}
+  hasselt__leuven: {road_distance_km: 70.9}
+  hasselt__liege: {road_distance_km: 50.1}
+  hasselt__lommel: {road_distance_km: 44.2}
+  hasselt__maaseik: {road_distance_km: 43.1}
+  hasselt__maasmechelen: {road_distance_km: 33.1}
+  hasselt__mol: {road_distance_km: 49.5}
+  hasselt__namur: {road_distance_km: 106.8}
+  ieper__aalst: {road_distance_km: 96.8}
+  ieper__antwerp: {road_distance_km: 130.3}
+  ieper__bruges: {road_distance_km: 71.5}
+  ieper__brussels_european: {road_distance_km: 124.5}
+  ieper__brussels_north: {road_distance_km: 121.0}
+  ieper__charleroi: {road_distance_km: 147.3}
+  ieper__ghent: {road_distance_km: 77.8}
+  ieper__kortrijk: {road_distance_km: 32.5}
+  ieper__mons: {road_distance_km: 105.7}
+  ieper__oostende: {road_distance_km: 79.7}
+  ieper__roeselare: {road_distance_km: 24.1}
+  ieper__tournai: {road_distance_km: 55.6}
+  kinrooi__antwerp: {road_distance_km: 120.1}
+  kinrooi__beringen: {road_distance_km: 63.4}
+  kinrooi__bilzen: {road_distance_km: 46.7}
+  kinrooi__diepenbeek: {road_distance_km: 47.3}
+  kinrooi__genk: {road_distance_km: 39.3}
+  kinrooi__hamont_achel: {road_distance_km: 32.7}
+  kinrooi__hasselt: {road_distance_km: 53.7}
+  kinrooi__leuven: {road_distance_km: 112.5}
+  kinrooi__liege: {road_distance_km: 80.7}
+  kinrooi__lommel: {road_distance_km: 55.8}
+  kinrooi__maasmechelen: {road_distance_km: 29.3}
+  kinrooi__namur: {road_distance_km: 132.5}
+  kortrijk__aalst: {road_distance_km: 69.2}
+  kortrijk__antwerp: {road_distance_km: 102.7}
+  kortrijk__bruges: {road_distance_km: 53.8}
+  kortrijk__brussels_european: {road_distance_km: 96.9}
+  kortrijk__brussels_north: {road_distance_km: 93.4}
+  kortrijk__charleroi: {road_distance_km: 124.6}
+  kortrijk__ghent: {road_distance_km: 50.2}
+  kortrijk__ieper: {road_distance_km: 31.5}
+  kortrijk__mons: {road_distance_km: 82.9}
+  kortrijk__oostende: {road_distance_km: 61.9}
+  kortrijk__roeselare: {road_distance_km: 27.8}
+  kortrijk__tournai: {road_distance_km: 32.9}
+  leuven__antwerp: {road_distance_km: 62.8}
+  leuven__brussels_centre: {road_distance_km: 34.1}
+  leuven__brussels_european: {road_distance_km: 28.0}
+  leuven__brussels_midi: {road_distance_km: 32.5}
+  leuven__brussels_north: {road_distance_km: 31.2}
+  leuven__brussels_west: {road_distance_km: 47.9}
+  leuven__charleroi: {road_distance_km: 70.6}
+  leuven__hasselt: {road_distance_km: 60.7}
+  leuven__mechelen: {road_distance_km: 27.3}
+  leuven__namur: {road_distance_km: 65.3}
+  leuven__vilvoorde: {road_distance_km: 32.7}
+  leuven__wavre: {road_distance_km: 33.9}
+  liege__beringen: {road_distance_km: 65.0}
+  liege__bilzen: {road_distance_km: 35.0}
+  liege__brussels_european: {road_distance_km: 98.0}
+  liege__brussels_north: {road_distance_km: 101.1}
+  liege__charleroi: {road_distance_km: 91.5}
+  liege__diepenbeek: {road_distance_km: 49.3}
+  liege__genk: {road_distance_km: 47.4}
+  liege__hasselt: {road_distance_km: 50.2}
+  liege__leuven: {road_distance_km: 75.0}
+  liege__maaseik: {road_distance_km: 67.8}
+  liege__maasmechelen: {road_distance_km: 45.1}
+  liege__namur: {road_distance_km: 70.0}
+  lommel__antwerp: {road_distance_km: 69.9}
+  lommel__beringen: {road_distance_km: 29.1}
+  lommel__brussels_european: {road_distance_km: 112.0}
+  lommel__geel: {road_distance_km: 24.6}
+  lommel__genk: {road_distance_km: 50.1}
+  lommel__hamont_achel: {road_distance_km: 20.9}
+  lommel__hasselt: {road_distance_km: 42.3}
+  lommel__kinrooi: {road_distance_km: 53.6}
+  lommel__leuven: {road_distance_km: 101.6}
+  lommel__liege: {road_distance_km: 91.4}
+  lommel__maaseik: {road_distance_km: 50.0}
+  lommel__turnhout: {road_distance_km: 38.4}
+  maaseik__antwerp: {road_distance_km: 106.2}
+  maaseik__beringen: {road_distance_km: 49.5}
+  maaseik__bilzen: {road_distance_km: 32.8}
+  maaseik__brussels_european: {road_distance_km: 109.0}
+  maaseik__diepenbeek: {road_distance_km: 33.4}
+  maaseik__genk: {road_distance_km: 25.4}
+  maaseik__hamont_achel: {road_distance_km: 27.1}
+  maaseik__hasselt: {road_distance_km: 39.8}
+  maaseik__leuven: {road_distance_km: 98.6}
+  maaseik__liege: {road_distance_km: 70.6}
+  maaseik__lommel: {road_distance_km: 49.1}
+  maaseik__mol: {road_distance_km: 54.4}
+  maaseik__namur: {road_distance_km: 126.9}
+  maaseik__oostende: {road_distance_km: 219.1}
+  maasmechelen__antwerp: {road_distance_km: 103.0}
+  maasmechelen__beringen: {road_distance_km: 46.3}
+  maasmechelen__bilzen: {road_distance_km: 30.2}
+  maasmechelen__brussels_european: {road_distance_km: 105.8}
+  maasmechelen__diepenbeek: {road_distance_km: 30.8}
+  maasmechelen__hamont_achel: {road_distance_km: 40.0}
+  maasmechelen__hasselt: {road_distance_km: 36.6}
+  maasmechelen__kinrooi: {road_distance_km: 21.8}
+  maasmechelen__leuven: {road_distance_km: 95.4}
+  maasmechelen__liege: {road_distance_km: 67.5}
+  maasmechelen__lommel: {road_distance_km: 64.7}
+  maasmechelen__namur: {road_distance_km: 119.3}
+  mechelen__antwerp: {road_distance_km: 22.8}
+  mechelen__brussels_centre: {road_distance_km: 38.1}
+  mechelen__brussels_european: {road_distance_km: 28.2}
+  mechelen__brussels_midi: {road_distance_km: 32.7}
+  mechelen__brussels_north: {road_distance_km: 27.5}
+  mechelen__brussels_west: {road_distance_km: 39.0}
+  mechelen__charleroi: {road_distance_km: 70.7}
+  mechelen__ghent: {road_distance_km: 79.0}
+  mechelen__hasselt: {road_distance_km: 78.8}
+  mechelen__leuven: {road_distance_km: 42.2}
+  mechelen__namur: {road_distance_km: 84.2}
+  mechelen__sint_niklaas: {road_distance_km: 44.4}
+  mol__antwerp: {road_distance_km: 55.7}
+  mol__beringen: {road_distance_km: 20.4}
+  mol__bilzen: {road_distance_km: 59.1}
+  mol__brussels_european: {road_distance_km: 78.7}
+  mol__brussels_north: {road_distance_km: 98.4}
+  mol__diepenbeek: {road_distance_km: 47.9}
+  mol__genk: {road_distance_km: 59.4}
+  mol__hamont_achel: {road_distance_km: 30.2}
+  mol__hasselt: {road_distance_km: 51.6}
+  mol__kinrooi: {road_distance_km: 62.9}
+  mol__leuven: {road_distance_km: 68.3}
+  mol__turnhout: {road_distance_km: 23.5}
+  mons__brussels_centre: {road_distance_km: 62.4}
+  mons__brussels_european: {road_distance_km: 68.0}
+  mons__brussels_midi: {road_distance_km: 63.0}
+  mons__brussels_north: {road_distance_km: 70.2}
+  mons__brussels_west: {road_distance_km: 62.5}
+  mons__charleroi: {road_distance_km: 39.7}
+  mons__ghent: {road_distance_km: 115.0}
+  mons__halle: {road_distance_km: 53.7}
+  mons__kortrijk: {road_distance_km: 85.2}
+  mons__leuven: {road_distance_km: 89.2}
+  mons__namur: {road_distance_km: 65.3}
+  mons__tournai: {road_distance_km: 57.7}
+  namur__antwerp: {road_distance_km: 103.7}
+  namur__brussels_centre: {road_distance_km: 68.1}
+  namur__brussels_european: {road_distance_km: 69.1}
+  namur__brussels_midi: {road_distance_km: 66.5}
+  namur__brussels_north: {road_distance_km: 66.4}
+  namur__charleroi: {road_distance_km: 34.4}
+  namur__genk: {road_distance_km: 103.1}
+  namur__halle: {road_distance_km: 80.4}
+  namur__hasselt: {road_distance_km: 105.9}
+  namur__leuven: {road_distance_km: 59.0}
+  namur__liege: {road_distance_km: 64.7}
+  namur__wavre: {road_distance_km: 44.5}
+  oostende__aalst: {road_distance_km: 88.5}
+  oostende__antwerp: {road_distance_km: 122.0}
+  oostende__bruges: {road_distance_km: 30.1}
+  oostende__brussels_european: {road_distance_km: 116.1}
+  oostende__brussels_north: {road_distance_km: 112.7}
+  oostende__ghent: {road_distance_km: 63.6}
+  oostende__ieper: {road_distance_km: 48.2}
+  oostende__kortrijk: {road_distance_km: 70.1}
+  oostende__roeselare: {road_distance_km: 49.2}
+  oostende__sint_niklaas: {road_distance_km: 103.3}
+  oostende__tournai: {road_distance_km: 92.8}
+  roeselare__aalst: {road_distance_km: 73.2}
+  roeselare__antwerp: {road_distance_km: 106.8}
+  roeselare__bruges: {road_distance_km: 33.4}
+  roeselare__brussels_european: {road_distance_km: 100.9}
+  roeselare__brussels_north: {road_distance_km: 97.4}
+  roeselare__charleroi: {road_distance_km: 142.4}
+  roeselare__ghent: {road_distance_km: 48.3}
+  roeselare__ieper: {road_distance_km: 26.6}
+  roeselare__kortrijk: {road_distance_km: 28.0}
+  roeselare__oostende: {road_distance_km: 41.5}
+  roeselare__sint_niklaas: {road_distance_km: 88.1}
+  roeselare__tournai: {road_distance_km: 50.7}
+  sint_niklaas__aalst: {road_distance_km: 40.5}
+  sint_niklaas__antwerp: {road_distance_km: 26.2}
+  sint_niklaas__bruges: {road_distance_km: 91.5}
+  sint_niklaas__brussels_centre: {road_distance_km: 51.9}
+  sint_niklaas__brussels_european: {road_distance_km: 48.9}
+  sint_niklaas__brussels_midi: {road_distance_km: 48.0}
+  sint_niklaas__brussels_north: {road_distance_km: 45.6}
+  sint_niklaas__ghent: {road_distance_km: 49.0}
+  sint_niklaas__kortrijk: {road_distance_km: 86.2}
+  sint_niklaas__leuven: {road_distance_km: 83.7}
+  sint_niklaas__mechelen: {road_distance_km: 41.5}
+  sint_niklaas__vilvoorde: {road_distance_km: 56.1}
+  tournai__aalst: {road_distance_km: 70.1}
+  tournai__bruges: {road_distance_km: 77.9}
+  tournai__brussels_european: {road_distance_km: 90.1}
+  tournai__brussels_north: {road_distance_km: 92.4}
+  tournai__charleroi: {road_distance_km: 91.7}
+  tournai__ghent: {road_distance_km: 75.7}
+  tournai__halle: {road_distance_km: 67.6}
+  tournai__ieper: {road_distance_km: 56.1}
+  tournai__kortrijk: {road_distance_km: 23.5}
+  tournai__leuven: {road_distance_km: 128.5}
+  tournai__mons: {road_distance_km: 50.1}
+  tournai__roeselare: {road_distance_km: 51.9}
+  turnhout__antwerp: {road_distance_km: 43.1}
+  turnhout__beringen: {road_distance_km: 43.2}
+  turnhout__brussels_european: {road_distance_km: 91.5}
+  turnhout__brussels_north: {road_distance_km: 85.8}
+  turnhout__geel: {road_distance_km: 21.0}
+  turnhout__genk: {road_distance_km: 74.8}
+  turnhout__hamont_achel: {road_distance_km: 54.9}
+  turnhout__hasselt: {road_distance_km: 63.3}
+  turnhout__leuven: {road_distance_km: 74.5}
+  turnhout__lommel: {road_distance_km: 34.9}
+  turnhout__mechelen: {road_distance_km: 63.3}
+  turnhout__mol: {road_distance_km: 25.9}
+  vilvoorde__aalst: {road_distance_km: 29.8}
+  vilvoorde__antwerp: {road_distance_km: 39.4}
+  vilvoorde__charleroi: {road_distance_km: 68.1}
+  vilvoorde__geel: {road_distance_km: 86.1}
+  vilvoorde__genk: {road_distance_km: 96.8}
+  vilvoorde__ghent: {road_distance_km: 58.7}
+  vilvoorde__halle: {road_distance_km: 33.9}
+  vilvoorde__hasselt: {road_distance_km: 85.3}
+  vilvoorde__leuven: {road_distance_km: 30.4}
+  vilvoorde__namur: {road_distance_km: 72.4}
+  vilvoorde__sint_niklaas: {road_distance_km: 40.8}
+  vilvoorde__wavre: {road_distance_km: 34.0}
+  wavre__antwerp: {road_distance_km: 66.0}
+  wavre__brussels_centre: {road_distance_km: 30.5}
+  wavre__brussels_european: {road_distance_km: 31.4}
+  wavre__brussels_midi: {road_distance_km: 28.9}
+  wavre__brussels_north: {road_distance_km: 28.7}
+  wavre__brussels_west: {road_distance_km: 51.2}
+  wavre__charleroi: {road_distance_km: 42.1}
+  wavre__halle: {road_distance_km: 35.2}
+  wavre__hasselt: {road_distance_km: 99.1}
+  wavre__leuven: {road_distance_km: 29.5}
+  wavre__namur: {road_distance_km: 44.9}
+  wavre__vilvoorde: {road_distance_km: 36.0}

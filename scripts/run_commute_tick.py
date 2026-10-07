@@ -14,7 +14,12 @@ def main() -> None:
     parser.add_argument("--provider", choices=("tomtom", "here"), default="tomtom")
     parser.add_argument("--execute", action="store_true", help="Spend API calls for verified routes")
     args = parser.parse_args()
-    print(json.dumps(run_tick(datetime.now(timezone.utc), provider=args.provider, execute=args.execute)))
+    result = run_tick(datetime.now(timezone.utc), provider=args.provider, execute=args.execute)
+    print(json.dumps(result))
+    if result["reason"] == "missing_keys":
+        # GitHub Actions annotation: visible on the run without failing it.
+        print(f"::warning::Skipped {result['due']} due {args.provider} polls; missing secrets: "
+              f"{', '.join(result['missing_keys'])}")
 
 
 if __name__ == "__main__":

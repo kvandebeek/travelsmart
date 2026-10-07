@@ -10,8 +10,13 @@ tomtom_accounts:
 # Every non-core route gets one sample per slot each month. Up to this many
 # routes get a second sample per slot, on a different working day.
 extra_rotating_routes_per_month: 300
-# Set only after confirming the allowance on the user's HERE account.
-here_daily_limit: 0
+# HERE Base Plan has a card on file: anything above the free tier is billed.
+# The lowest published free allowance for car routing is 5,000 transactions a
+# month, so both caps stay well under it: 4 routes x 24 slots = 96 a day, and a
+# hard monthly stop at 3,000 even if manual runs are added. Every attempt counts,
+# including failed ones.
+here_daily_limit: 96
+here_monthly_limit: 3000
 here_routes_per_slot: 4
 
 # Only the ten national statutory dates are computed automatically. Company or

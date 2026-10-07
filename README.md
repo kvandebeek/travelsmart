@@ -66,22 +66,24 @@ flowchart LR
 | Free monthly allowance | 20,000 | 20,000 |
 | Kept in reserve | 2,000 | 2,000 |
 
+HERE is a small cross-check: 4 routes per slot, capped at **96 calls a day and 3,000 a month**. That is well below the lowest published free allowance for HERE car routing, 5,000 a month. Every attempt counts towards the cap, including failed ones.
+
 Run `python scripts/plan_commutes.py --month 2026-10` to recompute it. No API calls are spent.
 
 ## 🚦 Project status
 
-> [!IMPORTANT]
-> The full pipeline is wired up, but **live collection is off until commute endpoints are verified**.
-> `config/commute_anchors.yaml` is intentionally empty. A route becomes collectable only after both endpoints have a verified public-road access point and the route has a measured road distance of at least 12 km. Until then, every scheduled run is a safe no-op.
+> [!NOTE]
+> All 446 commutes have road-snapped home and work points in `config/commute_anchors.yaml`, each with a measured road distance of at least 12 km. A slot without a configured API key is skipped with a warning; it never borrows another account's key.
 
 | Component | State |
 |---|---|
-| Commute catalogue and monthly planner | ✅ Ready |
-| Live TomTom/HERE collector with budget guards | ✅ Ready, waiting for anchors |
-| Weather, school, daylight and road-event context | ✅ Ready |
-| Commute dashboard | ✅ Ready, shows “no data yet” |
-| Verified home and work access points | ⏳ Next step |
-| HERE daily allowance | ⏳ `here_daily_limit: 0` until confirmed |
+| Commute catalogue and monthly planner | ✅ Live |
+| Home and work points (OpenStreetMap, road-snapped) | ✅ 446 / 446 routes verified |
+| TomTom morning account | ✅ Collecting |
+| TomTom evening account | ⏳ Waiting for the `TOMTOM_API_KEY2` secret |
+| HERE cross-check sample | ✅ Collecting, hard-capped at 96 a day and 3,000 a month |
+| Weather, school, daylight and road-event context | ✅ Live |
+| Commute dashboard | ✅ GitHub Pages |
 | Corridor splitting for long routes | 🧪 Design only |
 
 ## 🚀 Quick start
@@ -100,20 +102,13 @@ python scripts/export_commutes.py                        # build dashboard data
 python -m http.server --directory public 8080            # open http://localhost:8080/commutes.html
 ```
 
-### Turning on live collection
+### Running it on your own fork
 
-1. Add verified coordinates to `config/commute_anchors.yaml`:
-   ```yaml
-   home:
-     diepenbeek: [50.9xx, 5.4xx]        # a street in Rooierheide, not a town hall
-   work:
-     brussels_european: [50.8xx, 4.3xx] # public road at the European Quarter
-   validated_routes:
-     diepenbeek__brussels_european: {road_distance_km: 81.2}
-   ```
-2. Add the repository secrets **`TOMTOM_API_KEY`** (morning account), **`TOMTOM_API_KEY2`** (evening account) and **`HERE_API_KEY`**.
-3. Enable **Settings → Pages → Source: GitHub Actions**.
-4. When the HERE allowance is confirmed, set `here_daily_limit` in `config/commute_schedule.yaml`.
+1. Add the repository secrets **`TOMTOM_API_KEY`** (morning account), **`TOMTOM_API_KEY2`** (evening account) and **`HERE_API_KEY`**.
+2. Enable **Settings → Pages → Source: GitHub Actions**.
+3. Check `here_daily_limit` and `here_monthly_limit` in `config/commute_schedule.yaml` against your HERE plan.
+
+Each endpoint in `config/commute_anchors.yaml` is a residential neighbourhood or an employment area. It was found in OpenStreetMap, reviewed so that, for example, no train station counts as a home, and snapped to the nearest drivable road. A route without a `validated_routes` entry is never collected.
 
 ## 🗂️ Project map
 
@@ -155,7 +150,7 @@ OSRM estimates have **no live traffic**. A spot check found rural routes close t
 | [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api) | Historical weather | CC BY 4.0 |
 | [Vlaams Verkeerscentrum DATEX II](https://www.verkeerscentrum.be/) | Road events | CC BY. © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum |
 | [MIV open data](https://miv-opendata.belfla.be/) | Loop-detector speeds | Open data |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) via OSRM | Baseline routes | ODbL |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) via OSRM and Nominatim | Baseline routes, commute endpoints | ODbL |
 
 Raw provider responses are not stored. Only derived travel time, distance and delay figures are kept, with the time of each request.
 

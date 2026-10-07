@@ -36,7 +36,8 @@ extra_routes:
       - bilzen__brussels
   - name: daytime
     account: evening
-    every_minutes: 5
+    every_minutes: 5          # GitHub runs scheduled workflows at most every 5 minutes,
+    per_tick: 4               # so each run measures several random routes at once
     windows: {daytime: ["09:00", "14:00"]}
     routes: [all]
 

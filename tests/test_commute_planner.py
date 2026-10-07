@@ -145,7 +145,9 @@ def test_daytime_stream_draws_from_everything_and_both_directions():
     schedule, routes = load_plan_inputs()
     polls = plan_month(2026, 10, schedule, routes)
     daytime = [p for p in polls if p.tier == "extra" and time(9) <= p.scheduled_at.time() < time(14)]
-    assert len(daytime) == 22 * 60
+    per_tick = schedule["extra_routes"][1]["per_tick"]
+    assert len(daytime) == 22 * 60 * per_tick
+    assert len({(p.route_id, p.scheduled_at) for p in daytime}) == len(daytime)  # distinct routes per tick
     assert {p.direction for p in daytime} == {"morning", "evening"}
     random_only = {r["id"] for r in routes if r["tier"] == "random"}
     assert random_only and random_only & {p.route_id for p in daytime}

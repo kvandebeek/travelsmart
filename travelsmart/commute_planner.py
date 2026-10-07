@@ -198,15 +198,16 @@ def _extra_polls(days: list[date], config: dict, schedule: dict, routes: list[di
             when = datetime.combine(day, time.fromisoformat(start), tzinfo=zone)
             stop = datetime.combine(day, time.fromisoformat(end), tzinfo=zone)
             while when < stop:
-                seed = int(_stable_rank("extra", when.isoformat())[:12], 16)
-                candidates = [entry[(seed // len(options)) % len(entry)] for entry in options]
-                way = direction if direction in ("morning", "evening") else ("morning", "evening")[seed // 7 % 2]
-                for offset in range(len(candidates)):
-                    route_id = candidates[(seed + offset) % len(candidates)]
-                    if (route_id, when) not in taken:
-                        polls.append(PlannedPoll(route_id, way, "extra", when, account))
-                        taken.add((route_id, when))
-                        break
+                for pick in range(config.get("per_tick", 1)):  # several routes measured at the same moment
+                    seed = int(_stable_rank("extra", when.isoformat(), str(pick))[:12], 16)
+                    candidates = [entry[(seed // len(options)) % len(entry)] for entry in options]
+                    way = direction if direction in ("morning", "evening") else ("morning", "evening")[seed // 7 % 2]
+                    for offset in range(len(candidates)):
+                        route_id = candidates[(seed + offset) % len(candidates)]
+                        if (route_id, when) not in taken:
+                            polls.append(PlannedPoll(route_id, way, "extra", when, account))
+                            taken.add((route_id, when))
+                            break
                 when += step
     return polls
 

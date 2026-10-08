@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.build_network import Progress
 from travelsmart.config import ROOT
-from travelsmart.network.connectors import select_network_ways
 from travelsmart.network.endpoints import Endpoint, build_endpoints, read_gtfs_stations
 from travelsmart.network.osm import EXTRACT, load_belgium
 from travelsmart.verified_fetch import USER_AGENT, verified_context
@@ -74,10 +73,11 @@ def main() -> None:
     def source_progress(message: str) -> None:
         progress.update(20 if message.startswith("Using cached") else 15, message)
 
+    # Deliberately the whole candidate set, not select_network_ways' backbone: an endpoint sits on an
+    # ordinary street, and the cache already holds every primary/secondary/tertiary road in Belgium.
     data = load_belgium(args.extract, progress=source_progress)
-    data = select_network_ways(data, progress=source_progress,
-                               update=lambda fraction, message: progress.update(20 + 20 * fraction, message))
-    progress.update(40, f"linking {len(endpoints):,} endpoints to {len(network['nodes']):,} network nodes")
+    progress.update(40, f"linking {len(endpoints):,} endpoints to {len(network['nodes']):,} network nodes "
+                        f"over {len(data.ways):,} candidate roads")
     result = build_endpoints(endpoints, network["nodes"], data,
                              update=lambda fraction, message: progress.update(40 + 55 * fraction, message))
 

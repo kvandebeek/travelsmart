@@ -105,8 +105,8 @@ the data.
 | Regional-road + length split nodes | 1,453 + 1,493 |
 | Backbone + transfer edges (directed) | 1,220 motorway + 8,879 regional + 341 transfer |
 | Ramp and shared-junction edges (directed) | 1,354 on + 1,541 off + 538 ramp links + 66 zero-distance junction turns |
-| Endpoint clusters (phase 2) | 505 for stations; ~1,500–3,000 once every category is loaded |
-| Access edges (phase 2, directed) | 1,647 for stations (879 along roads, 768 still estimated by distance) |
+| Endpoint clusters (phase 2) | 503 for stations; ~1,500–3,000 once every category is loaded |
+| Access edges (phase 2, directed) | 1,569 for stations (1,437 along roads, 132 estimated by distance) |
 
 The builder includes the shortest legal local road paths found within 15 km in both directions
 between motorway exits and the N1–N99/R1–R99 backbone. Exact OSM junctions remain separate so

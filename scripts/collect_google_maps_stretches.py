@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
+import re
 import sys
 import time
 from dataclasses import dataclass
@@ -33,6 +35,29 @@ class Leg:
     count: int
     origin: Point
     destination: Point
+
+
+def default_storage_dirs(corridor_ids: list[str] | None, direction: str,
+                         run_id: str | None) -> tuple[Path, Path]:
+    """Give independent stretch selections their own capture and browser folders."""
+    if not corridor_ids and direction == "both" and not run_id:
+        return ROOT / "data" / "google_maps_stretches", ROOT / "data" / "google_maps_stretches_profile"
+    selection = "_".join(sorted(set(corridor_ids))) if corridor_ids else "all"
+    slug = re.sub(r"[^a-z0-9_-]+", "_", selection.lower()).strip("_")
+    slug = f"{slug}_{direction}"
+    if len(slug) > 64:
+        digest = hashlib.sha256(slug.encode("utf-8")).hexdigest()[:12]
+        slug = f"group_{digest}_{direction}"
+    if run_id:
+        label = re.sub(r"[^a-z0-9_-]+", "_", run_id.lower()).strip("_")
+        if not label:
+            raise ValueError("run ID needs at least one letter or digit")
+        if len(label) > 32:
+            digest = hashlib.sha256(run_id.encode("utf-8")).hexdigest()[:12]
+            label = f"{label[:20]}_{digest}"
+        slug += f"_{label}"
+    return (ROOT / "data" / f"google_maps_stretches_{slug}_captures",
+            ROOT / "data" / f"google_maps_stretches_{slug}_profile")
 
 
 def load_corridors(path: Path, points: dict[str, Point]) -> list[Corridor]:
@@ -97,6 +122,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--corridor", action="append", help="Run only this corridor ID; repeat to select several")
     parser.add_argument("--direction", choices=("both", "forward", "reverse"), default="both")
+    parser.add_argument("--run-id", help="Label for a parallel copy of the same corridor selection")
     parser.add_argument("--points-file", type=Path, default=ROOT / "config" / "google_maps_points.csv")
     parser.add_argument("--extra-points-file", type=Path,
                         default=ROOT / "config" / "google_maps_stretch_points.csv")
@@ -112,15 +138,12 @@ def main() -> int:
     parser.add_argument("--dry-run", action="store_true", help="Show planned checks without opening a browser")
     parser.add_argument("--screenshots", action="store_true", help="Also save labeled PNGs")
     parser.add_argument("--headless", action="store_true", help="Hide the browser window")
-    parser.add_argument("--output-dir", type=Path, default=ROOT / "data" / "google_maps_stretches")
-    parser.add_argument("--profile-dir", type=Path, default=ROOT / "data" / "google_maps_stretches_profile")
+    parser.add_argument("--output-dir", type=Path, help="Capture folder; defaults to one per selection")
+    parser.add_argument("--profile-dir", type=Path, help="Browser profile; defaults to one per selection")
     args = parser.parse_args()
     if (args.delay_seconds < 0 or args.jitter_seconds < 0 or args.settle_seconds < 0
             or args.interval_minutes <= 0 or args.timeout_seconds <= 0):
         parser.error("interval and timeout must be positive; delays cannot be negative")
-    if args.output_dir.resolve() == args.profile_dir.resolve():
-        parser.error("output and profile directories must differ")
-
     try:
         point_rows = load_points(args.points_file) + load_points(args.extra_points_file)
         if len({point.id for point in point_rows}) != len(point_rows):
@@ -136,12 +159,23 @@ def main() -> int:
             parser.error(f"unknown corridors: {', '.join(sorted(unknown))}")
         corridors = [corridor for corridor in corridors if corridor.id in selected]
 
+    try:
+        default_output, default_profile = default_storage_dirs(args.corridor, args.direction, args.run_id)
+    except ValueError as error:
+        parser.error(str(error))
+    args.output_dir = args.output_dir or default_output
+    args.profile_dir = args.profile_dir or default_profile
+    if args.output_dir.resolve() == args.profile_dir.resolve():
+        parser.error("output and profile directories must differ")
+
     directions = ("forward", "reverse") if args.direction == "both" else (args.direction,)
     groups = [(corridor, direction, corridor_legs(corridor, points, direction))
               for corridor in corridors for direction in directions]
     check_count = sum(len(legs) for _, _, legs in groups)
     if args.dry_run:
         print(json.dumps({"corridors": len(corridors), "directed_legs": check_count,
+                          "output_dir": str(args.output_dir.resolve()),
+                          "profile_dir": str(args.profile_dir.resolve()),
                           "minimum_pause_minutes": round((check_count - 1) * args.delay_seconds / 60, 1),
                           "by_corridor": {corridor.id: (len(corridor.nodes) - 1) * len(directions)
                                           for corridor in corridors}}))
@@ -149,11 +183,20 @@ def main() -> int:
 
     args.profile_dir.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
-        context = playwright.chromium.launch_persistent_context(
-            str(args.profile_dir.resolve()), headless=args.headless,
-            viewport={"width": 1440, "height": 900}, locale="en-GB",
-            timezone_id="Europe/Brussels",
-        )
+        try:
+            context = playwright.chromium.launch_persistent_context(
+                str(args.profile_dir.resolve()), headless=args.headless,
+                viewport={"width": 1440, "height": 900}, locale="en-GB",
+                timezone_id="Europe/Brussels",
+            )
+        except PlaywrightError as error:
+            if "Opening in existing browser session" in str(error):
+                print(f"Browser profile is already in use: {args.profile_dir.resolve()}\n"
+                      "Use a distinct --run-id or --profile-dir for another simultaneous run.",
+                      file=sys.stderr)
+            else:
+                print(f"Could not start Chromium: {error}", file=sys.stderr)
+            return 2
         page = context.pages[0] if context.pages else context.new_page()
         try:
             while True:

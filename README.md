@@ -148,6 +148,15 @@ The separate stretch runner measures only adjacent points in each corridor, in b
 
 The full set has 138 directed leg checks and at least 2 minutes of 1-second pauses, plus page loading and settling time. All selected legs are shuffled each sweep, including legs within a corridor. Results go to `data/google_maps_stretches/captures.jsonl`; each row includes its corridor, direction, original leg index, shared endpoint IDs, time, duration, and distance. `summaries.jsonl` has one row per corridor and direction, including the sum of leg times and the span between its first and last measurement. Incomplete corridors have no sum. Some extra points use place names rather than coordinate pins, so check their resolved locations before treating sums as precise road measurements. The runner uses a separate visible browser profile, so its first run may show Google's consent screen. Omit `--once` to repeat sweeps.
 
+Different corridor selections can run in parallel: each selection and direction now gets its own capture folder and browser profile. For example, start these in separate PowerShell windows:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\collect_google_maps_stretches.py --corridor liege_oostende --direction forward --once
+.\.venv\Scripts\python.exe scripts\collect_google_maps_stretches.py --corridor wallonia_e42 --direction reverse --once
+```
+
+Use `--run-id second` when running the same selection twice at once; it gives the second run separate folders. `--dry-run` prints the chosen folders. The importer finds every resulting `captures.jsonl` under `data/`. A full unfiltered run keeps the original `data/google_maps_stretches` folders.
+
 Adding adjacent leg times estimates a **journey through those exact listed points**. The measured legs are taken minutes apart, while a driver would enter each later leg at a later time, and Google's fastest full route may bypass some points. Keep those limits in mind when using sums as a corridor estimate.
 
 ### Belgian municipality list and directional pairs

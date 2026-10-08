@@ -255,9 +255,18 @@ weeks of collection the later phases need. Collection should start as early as p
 
 ## 12. Open points
 
-- **Google exact seconds**: Google's directions response appears to contain durations in seconds
-  next to the rounded labels; this needs a reliable parse. Without it, short Google edges are
-  limited by whole-minute rounding.
+- **Google exact seconds**: looked for on 9 October 2026 and not found.
+  `scripts/probe_google_seconds.py` reads the page's globals
+  (`APP_INITIALIZATION_STATE`, `APP_OPTIONS`, `WIZ_global_data`) and intercepts the background
+  responses, then reports every integer within 20% of the card's rounded duration. On a 61-minute
+  route there was no tight cluster anywhere: `APP_INITIALIZATION_STATE` yields a thousand scattered
+  matches in 626,000 characters, and the few in `APP_OPTIONS` are the request's own coordinates with
+  the decimal point removed. The duration appears to reach the page already rounded.
+
+  So Google stays a whole-minute provider, which is bearable because it is the second opinion and
+  the road check, while TomTom and HERE give exact seconds. It also argues for pointing Google at
+  longer edges, where a 30-second rounding is a small share. The probe is kept so the question can
+  be asked again cheaply; Google's page changes often.
 - **Provider terms: a real constraint, deferred by the owner on 8 October 2026** (design proceeds as described; revisit before relying on stored TomTom/HERE data publicly).
   - TomTom's developer terms (13.3) prohibit "the caching or storing of any Results", except
     short-term caching within the response's cache headers, and the free plan only permits

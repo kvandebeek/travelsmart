@@ -27,6 +27,11 @@ def _identity(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()[:20]
 
 
+def google_route_id(origin_location: str, destination_location: str) -> str:
+    """Directed route ID for a pair of Google Maps locations, shared by every collector."""
+    return "google:" + _identity(json.dumps([origin_location, destination_location], ensure_ascii=False))
+
+
 def normalize_capture(raw: dict, source_file: str) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("capture must be a JSON object")
@@ -47,7 +52,7 @@ def normalize_capture(raw: dict, source_file: str) -> dict:
     distance = raw.get("distance_km")
     if status == "ok" and (not isinstance(duration, (int, float)) or duration <= 0):
         raise ValueError("successful capture needs a positive travel_time_minutes")
-    route_id = "google:" + _identity(json.dumps([origin_location, destination_location], ensure_ascii=False))
+    route_id = google_route_id(origin_location, destination_location)
     return {
         "provider": "google_maps", "account": None, "capture_id": capture_id,
         "route_id": route_id, "direction": "direct", "tier": "google",

@@ -2,14 +2,16 @@
 //   from: pick a start town; every destination is coloured by how busy the trip usually is
 //         (travel time vs an empty road). Optionally narrow it to one destination.
 //   to:   pick a destination; every start town is coloured by how long the trip usually takes.
+//   corridor: pick a Google Maps corridor and direction; each stretch, in driving order, is coloured
+//         by how it compares with its own usual time (on the map and as a strip).
 // Time is continuous: between two measured half hours values are blended, and colours flow
 // along a gradient (mixed in OKLab, so in-between shades stay clean). Lines follow
 // OpenStreetMap road paths where available. ?demo shows made-up data.
 const $ = id => document.getElementById(id);
 const DEMO = new URLSearchParams(location.search).has('demo');
 const MINUTES_PER_BUCKET = 30;
-const state = {data: null, mode: 'from', origin: null, target: '', arrive: null, t: 0, trips: [], anchor: null, coverage: null,
-               playing: false, tween: null, roads: {}, demo: {}};
+const state = {data: null, mode: 'from', origin: null, target: '', arrive: null, corridor: null, direction: 'forward',
+               t: 0, trips: [], anchor: null, coverage: null, playing: false, tween: null, roads: {}, demo: {}};
 
 const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const place = key => state.data.places[key];
@@ -52,6 +54,8 @@ function scaleColor(stops, value) {
 }
 // Busy: congestion share. Stops sit in the middle of each level, so colours match the labels.
 const BUSY_STOPS = [[0.05, '--calm'], [0.175, '--moderate'], [0.35, '--busy'], [0.55, '--very-busy']];
+// Corridor stretches: share above (+) or below (-) the stretch's own usual time.
+const USUAL_STOPS = [[-0.12, '--quieter'], [0.025, '--calm'], [0.2, '--busy'], [0.45, '--very-busy']];
 // Travel time in minutes.
 const TIME_STOPS = [[10, '--t1'], [30, '--t2'], [50, '--t3'], [75, '--t4'], [105, '--t5']];
 
@@ -68,12 +72,19 @@ function entryAt(stats, t) {
 }
 function levelOf(entry) {
   if (!entry) return {id: 'none', label: 'Not enough data yet'};
-  return state.data.levels.find(level => level.below === null || entry[1] < level.below);
+  const levels = state.mode === 'corridor' ? state.data.corridors.levels : state.data.levels;
+  return levels.find(level => level.below === null || entry[1] < level.below);
 }
 let noData = null;
 const grey = () => (noData ||= css('--no-data'));
 const busyColor = entry => entry ? scaleColor(BUSY_STOPS, entry[1]) : grey();
 const timeColor = entry => entry ? scaleColor(TIME_STOPS, entry[2]) : grey();
+const usualColor = entry => entry ? scaleColor(USUAL_STOPS, entry[1]) : grey();
+function vsUsual(entry, usual) {
+  const percent = Math.round(entry[1] * 100), minutes = Math.round(entry[2] - usual);
+  if (Math.abs(percent) < 3) return 'as usual';
+  return `${Math.abs(percent)}% ${percent > 0 ? 'slower' : 'quicker'} than usual (${minutes >= 0 ? '+' : '−'}${Math.abs(minutes)} min)`;
+}
 const aboutMinutes = minutes => `about ${Math.max(5, Math.round(minutes / 5) * 5)} min`;
 function clock(t) {
   const minutes = Math.round(t * MINUTES_PER_BUCKET) + +state.data.buckets[0].slice(0, 2) * 60 + +state.data.buckets[0].slice(3);
@@ -120,6 +131,10 @@ function destinationsFrom(origin) {
 function originsTo(target) {
   return state.data.origins.filter(origin => origin !== target && destinationsFrom(origin).includes(target));
 }
+const corridors = () => state.data.corridors?.corridors || [];
+const corridorPoint = key => state.data.corridors.points[key];
+const currentCorridor = () => corridors().find(corridor => corridor.id === state.corridor);
+const currentLegs = () => currentCorridor().directions[state.direction];
 
 // --- map -----------------------------------------------------------------------------
 const map = L.map('map', {zoomSnap: 0.25, scrollWheelZoom: false}).setView([50.75, 4.5], 8);
@@ -168,6 +183,11 @@ function build() {
   state.trips.forEach(trip => [trip.line, trip.hit, trip.dot].forEach(layer => layer.remove()));
   state.anchor?.remove();
   state.trips = [];
+  if (state.mode === 'corridor') buildCorridor(); else buildTrips();
+  renderCoverage();
+  recolor();
+}
+function buildTrips() {
   const pairs = state.mode === 'from'
     ? farthestFirst(state.origin, state.target ? [state.target] : destinationsFrom(state.origin)).map(key => [state.origin, key, key])
     : farthestFirst(state.arrive, originsTo(state.arrive)).map(key => [key, state.arrive, key]);
@@ -180,14 +200,36 @@ function build() {
     dot.on('click', () => state.mode === 'from' ? setTarget(other) : (setMode('from'), setOrigin(other, state.arrive)));
     hit.on('mouseover', () => line.setStyle({weight: 4.5}));
     hit.on('mouseout', () => line.setStyle({weight: 2.5}));
-    state.trips.push({from, to, other, line, hit, dot});
+    state.trips.push({from, to, other, line, hit, dot, stats: statsFrom(from)[to], fromName: place(from).name, toName: place(to).name});
   }
   const anchorKey = state.mode === 'from' ? state.origin : state.arrive;
-  renderCoverage();
   state.anchor = L.circleMarker(place(anchorKey).point, {radius: 10, color: css('--ring'), weight: 3, fillColor: css('--you'), fillOpacity: 1})
     .bindTooltip(`${state.mode === 'from' ? 'Start' : 'Destination'}: ${place(anchorKey).name}`,
                  {permanent: true, direction: 'right', offset: [10, 0], className: 'trip'}).addTo(map);
-  recolor();
+}
+// A corridor: its stretches as a chain of straight segments, plus one strip segment each.
+function buildCorridor() {
+  const legs = currentLegs(), known = legs.filter(leg => leg.usual).map(leg => leg.usual);
+  const fallback = known.length ? known.reduce((a, b) => a + b) / known.length : 1;  // width for stretches without data
+  const segments = legs.map(() => document.createElement('span'));
+  $('corridor-bar').replaceChildren(...segments);
+  legs.forEach((leg, index) => {
+    const from = corridorPoint(leg.from), to = corridorPoint(leg.to), path = [from.point, to.point];
+    const line = L.polyline(path, {weight: 5, opacity: 0.9, interactive: false}).addTo(map);
+    const hit = L.polyline(path, {opacity: 0, weight: 16}).bindTooltip('', {sticky: true, className: 'trip'}).addTo(map);
+    const dot = L.circleMarker(to.point, {radius: 5, color: css('--ring'), weight: 2, fillColor: css('--you'), fillOpacity: 1})
+      .bindTooltip(to.name, {className: 'trip', direction: 'top', offset: [0, -4]}).addTo(map);
+    hit.on('mouseover', () => line.setStyle({weight: 8}));
+    hit.on('mouseout', () => line.setStyle({weight: 5}));
+    segments[index].style.flexGrow = leg.usual || fallback;
+    state.trips.push({from: leg.from, to: leg.to, line, hit, dot, stats: leg.stats, usual: leg.usual, corridor: true,
+                      fromName: from.name, toName: to.name, segment: segments[index]});
+  });
+  const first = corridorPoint(legs[0].from);
+  $('corridor-start').textContent = first.name;
+  $('corridor-end').textContent = corridorPoint(legs.at(-1).to).name;
+  state.anchor = L.circleMarker(first.point, {radius: 9, color: css('--ring'), weight: 3, fillColor: css('--you'), fillOpacity: 1})
+    .bindTooltip(`Start: ${first.name}`, {permanent: true, direction: 'right', offset: [10, 0], className: 'trip'}).addTo(map);
 }
 
 function recolor() {
@@ -195,19 +237,29 @@ function recolor() {
   $('time-label').textContent = time;
   $('time').value = state.t;
   for (const trip of state.trips) {
-    const entry = entryAt(statsFrom(trip.from)[trip.to], state.t), level = levelOf(entry);
-    const color = state.mode === 'from' ? busyColor(entry) : timeColor(entry);
-    const usual = !entry ? level.label : state.mode === 'from' ? level.label : `${aboutMinutes(entry[2])} (${level.label.toLowerCase()})`;
+    const entry = entryAt(trip.stats, state.t), level = levelOf(entry);
+    const color = state.mode === 'from' ? busyColor(entry) : state.mode === 'to' ? timeColor(entry) : usualColor(entry);
+    const usual = !entry ? level.label : state.mode === 'from' ? level.label
+      : state.mode === 'to' ? `${aboutMinutes(entry[2])} (${level.label.toLowerCase()})` : vsUsual(entry, trip.usual);
     const measured = entry ? entry[0] : 0;
-    const tip = `<strong>${place(trip.from).name} → ${place(trip.to).name}</strong><br>Leaving ${time}: <strong>${usual}</strong><br>` +
-      (entry ? `based on ${measured}+ measurements around this time` : 'fewer than 3 measurements around this time');
+    const tip = `<strong>${trip.fromName} → ${trip.toName}</strong><br>Leaving ${time}: <strong>${usual}</strong><br>` +
+      (entry ? `based on ${measured}+ measurements around this time`
+        : trip.corridor && !trip.usual ? 'no usual time yet: needs measurements in 4 or more half hours'
+        : 'fewer than 3 measurements around this time');
     trip.line.setStyle({color, opacity: entry ? 0.85 : 0.45, dashArray: entry ? null : '4 6'});
-    trip.dot.setStyle({fillColor: color});
-    trip.hit.setTooltipContent(tip); trip.dot.setTooltipContent(tip);
+    trip.hit.setTooltipContent(tip);
+    if (trip.corridor) {
+      trip.segment.style.background = color;
+      trip.segment.title = `${trip.fromName} → ${trip.toName}: ${usual}`;
+    } else {
+      trip.dot.setStyle({fillColor: color});
+      trip.dot.setTooltipContent(tip);
+    }
     rows.push({trip, entry, level, color});
   }
   renderList(rows, time);
   renderStrip();
+  renderCorridorNote(rows);
   renderCoverageNote();
 }
 
@@ -218,7 +270,7 @@ function coverage() {
   return state.data.buckets.map(bucket => {
     let judged = 0, measured = 0, measurements = 0;
     for (const trip of state.trips) {
-      const entry = statsFrom(trip.from)[trip.to]?.[bucket];
+      const entry = trip.stats?.[bucket];
       if (!entry) continue;
       measured += 1;
       measurements += entry[0];
@@ -276,19 +328,34 @@ function renderStrip() {
     `(${levelOf([1, best]).label.toLowerCase()}). Click the bar to jump there.`;
 }
 
+// Corridor view: name the stretch that stands out most at the chosen time.
+function renderCorridorNote(rows) {
+  if (state.mode !== 'corridor') return;
+  const judged = rows.filter(row => row.entry);
+  if (!judged.length) { $('corridor-note').textContent = 'Not enough data yet for any stretch at this time.'; return; }
+  const worst = judged.reduce((a, b) => b.entry[1] > a.entry[1] ? b : a);
+  $('corridor-note').textContent = worst.entry[1] < 0.10
+    ? `Every measured stretch is about as usual or quicker at this time (${judged.length} of ${rows.length} measured).`
+    : `Slowest compared with usual: ${worst.trip.fromName} → ${worst.trip.toName}, ${vsUsual(worst.entry, worst.trip.usual)}.`;
+}
+
 function renderList(rows, time) {
   const headers = state.mode === 'from' ? ['Destination', 'Usually', 'Measurements around this time']
-    : ['Start from', 'Usually takes', 'How busy', 'Measurements around this time'];
+    : state.mode === 'to' ? ['Start from', 'Usually takes', 'How busy', 'Measurements around this time']
+    : ['Stretch', 'Compared with usual', 'Usually takes', 'Measurements around this time'];
   $('list-head').replaceChildren(...headers.map(text => Object.assign(document.createElement('th'), {textContent: text})));
-  rows.sort(state.mode === 'from'
+  if (state.mode !== 'corridor') rows.sort(state.mode === 'from'
     ? (a, b) => (a.entry ? a.entry[1] : Infinity) - (b.entry ? b.entry[1] : Infinity) || place(a.trip.other).name.localeCompare(place(b.trip.other).name)
     : (a, b) => (a.entry ? a.entry[2] : Infinity) - (b.entry ? b.entry[2] : Infinity) || place(a.trip.other).name.localeCompare(place(b.trip.other).name));
   const body = $('list'); body.replaceChildren();
   for (const row of rows) {
     const cells = state.mode === 'from'
       ? [place(row.trip.other).name, {color: row.color, text: row.level.label}, row.entry ? `${row.entry[0]}+` : '0–2']
-      : [place(row.trip.other).name, {color: row.color, text: row.entry ? aboutMinutes(row.entry[2]) : row.level.label},
-         row.entry ? row.level.label : '—', row.entry ? `${row.entry[0]}+` : '0–2'];
+      : state.mode === 'to'
+      ? [place(row.trip.other).name, {color: row.color, text: row.entry ? aboutMinutes(row.entry[2]) : row.level.label},
+         row.entry ? row.level.label : '—', row.entry ? `${row.entry[0]}+` : '0–2']
+      : [`${row.trip.fromName} → ${row.trip.toName}`, {color: row.color, text: row.entry ? vsUsual(row.entry, row.trip.usual) : row.level.label},
+         row.trip.usual ? aboutMinutes(row.trip.usual) : '—', row.entry ? `${row.entry[0]}+` : '0–2'];
     const tr = document.createElement('tr');
     for (const cell of cells) {
       const td = document.createElement('td');
@@ -302,13 +369,14 @@ function renderList(rows, time) {
     body.append(tr);
   }
   const judged = rows.filter(row => row.entry).length;
-  const anchor = place(state.mode === 'from' ? state.origin : state.arrive).name;
-  $('list-meta').textContent = `${state.mode === 'from' ? 'From' : 'To'} ${anchor}, leaving ${time} · ${judged} of ${rows.length} with enough data`;
+  const anchor = state.mode === 'corridor' ? `Towards ${corridorPoint(currentLegs().at(-1).to).name}`
+    : `${state.mode === 'from' ? 'From' : 'To'} ${place(state.mode === 'from' ? state.origin : state.arrive).name}`;
+  $('list-meta').textContent = `${anchor}, leaving ${time} · ${judged} of ${rows.length} with enough data`;
 }
 
 function renderLegend() {
   const legend = $('legend'); legend.replaceChildren();
-  const stops = state.mode === 'from' ? BUSY_STOPS : TIME_STOPS;
+  const stops = state.mode === 'from' ? BUSY_STOPS : state.mode === 'to' ? TIME_STOPS : USUAL_STOPS;
   const low = stops[0][0], high = stops.at(-1)[0];
   const gradient = Array.from({length: 21}, (_, i) => {
     const value = low + (high - low) * i / 20;
@@ -318,7 +386,8 @@ function renderLegend() {
   const bar = document.createElement('div'); bar.className = 'legend-bar'; bar.style.background = `linear-gradient(to right, ${gradient.join(', ')})`;
   const labels = document.createElement('div'); labels.className = 'legend-labels';
   // Each label sits under its own colour stop, so the words match the gradient.
-  const words = state.mode === 'from' ? ['Calm', 'Moderate', 'Busy', 'Very busy'] : ['10 min', '30', '50', '75', '105+ min'];
+  const words = state.mode === 'from' ? ['Calm', 'Moderate', 'Busy', 'Very busy']
+    : state.mode === 'to' ? ['10 min', '30', '50', '75', '105+ min'] : ['Quieter', 'As usual', 'Slower', 'Much slower'];
   labels.replaceChildren(...stops.map(([at], i) => {
     const span = Object.assign(document.createElement('span'), {textContent: words[i]});
     span.style.left = `${(at - low) / (high - low) * 100}%`;
@@ -333,10 +402,11 @@ function renderLegend() {
     span.append(swatch, text); legend.append(span);
   };
   item('--no-data', 'Not enough data yet (dashed)');
-  item('--you', state.mode === 'from' ? 'Your start' : 'Destination');
-  if (state.mode === 'from') {
+  item('--you', state.mode === 'from' ? 'Your start' : state.mode === 'to' ? 'Destination' : 'Corridor points');
+  if (state.mode !== 'to') {
     const note = document.createElement('span'); note.className = 'legend-item';
-    note.textContent = 'Busy = how much slower than an empty road';
+    note.textContent = state.mode === 'from' ? 'Busy = how much slower than an empty road'
+      : "Compared with each stretch's own usual time";
     legend.append(note);
   }
 }
@@ -395,7 +465,8 @@ function fit(keys) {
 }
 function remember() {
   store.set('travelsmart-origin', state.origin);
-  const hash = state.mode === 'from' ? `${state.origin}${state.target ? `/${state.target}` : ''}` : `to/${state.arrive}`;
+  const hash = state.mode === 'from' ? `${state.origin}${state.target ? `/${state.target}` : ''}`
+    : state.mode === 'to' ? `to/${state.arrive}` : `corridor/${state.corridor}/${state.direction}`;
   history.replaceState(null, '', `${location.search}#${hash}`);
 }
 function setOrigin(key, target = '') {
@@ -419,15 +490,27 @@ function setArrive(key) {
   remember(); build();
   fit([key, ...originsTo(key)]);
 }
+function setCorridor(id, direction = state.direction) {
+  state.corridor = (corridors().find(corridor => corridor.id === id) || corridors()[0]).id;
+  state.direction = direction === 'reverse' ? 'reverse' : 'forward';
+  $('corridor').value = state.corridor;
+  const towards = way => `Towards ${corridorPoint(currentCorridor().directions[way].at(-1).to).name}`;
+  $('direction').replaceChildren(option('forward', towards('forward')), option('reverse', towards('reverse')));
+  $('direction').value = state.direction;
+  remember(); build();
+  map.fitBounds(L.latLngBounds(currentLegs().flatMap(leg => [corridorPoint(leg.from).point, corridorPoint(leg.to).point])),
+                {padding: [36, 36], maxZoom: 10});
+}
 function setMode(mode) {
   state.mode = mode;
-  $('tab-from').setAttribute('aria-selected', String(mode === 'from'));
-  $('tab-to').setAttribute('aria-selected', String(mode === 'to'));
+  for (const tab of ['from', 'to', 'corridor']) $(`tab-${tab}`).setAttribute('aria-selected', String(mode === tab));
   document.querySelectorAll('[data-mode]').forEach(el => { el.hidden = el.dataset.mode !== mode; });
-  $('intro').textContent = mode === 'from'
-    ? 'Pick where you start, slide the departure time, and see how busy each trip usually is compared with an empty road.'
-    : 'Pick a destination, slide the departure time, and see how long it usually takes to get there from each town.';
-  $('list-title').textContent = mode === 'from' ? 'Destinations' : 'Start towns';
+  $('intro').textContent = {
+    from: 'Pick where you start, slide the departure time, and see how busy each trip usually is compared with an empty road.',
+    to: 'Pick a destination, slide the departure time, and see how long it usually takes to get there from each town.',
+    corridor: 'Pick a corridor and direction, slide the departure time, and see which stretches are slower or quicker than usual.',
+  }[mode];
+  $('list-title').textContent = {from: 'Destinations', to: 'Start towns', corridor: 'Stretches'}[mode];
   renderLegend();
 }
 
@@ -448,16 +531,23 @@ async function start() {
     ? [Object.assign(document.createElement('span'), {textContent: b, style: `--at: ${index / slider.max}`})] : []));
   state.t = defaultTime();
 
-  // #diepenbeek, #diepenbeek/brussels or #to/brussels
-  const [first, second = ''] = (location.hash.slice(1) || store.get('travelsmart-origin') || 'diepenbeek').split('/').map(decodeURIComponent);
+  $('tab-corridor').hidden = !corridors().length;
+  $('corridor').replaceChildren(...corridors().map(corridor => option(corridor.id, corridor.name)));
+
+  // #diepenbeek, #diepenbeek/brussels, #to/brussels or #corridor/e314/reverse
+  const [first, second = '', third = ''] = (location.hash.slice(1) || store.get('travelsmart-origin') || 'diepenbeek').split('/').map(decodeURIComponent);
   state.origin = state.data.origins.includes(first) ? first : state.data.origins.includes('diepenbeek') ? 'diepenbeek' : state.data.origins[0];
   state.arrive = reachable.includes(second) ? second : reachable.includes('brussels') ? 'brussels' : reachable[0];
   $('arrive').value = state.arrive;
   if (first === 'to') { setMode('to'); setArrive(state.arrive); }
+  else if (first === 'corridor' && corridors().length) { setMode('corridor'); setCorridor(second, third); }
   else { setMode('from'); setOrigin(state.origin, second); }
 
   $('tab-from').addEventListener('click', () => { setMode('from'); setOrigin(state.origin, state.target); });
   $('tab-to').addEventListener('click', () => { setMode('to'); setArrive(state.arrive); });
+  $('tab-corridor').addEventListener('click', () => { setMode('corridor'); setCorridor(state.corridor); });
+  $('corridor').addEventListener('change', () => setCorridor($('corridor').value));
+  $('direction').addEventListener('change', () => setCorridor(state.corridor, $('direction').value));
   $('origin').addEventListener('change', () => setOrigin($('origin').value));
   $('destination').addEventListener('change', () => setTarget($('destination').value));
   $('arrive').addEventListener('change', () => setArrive($('arrive').value));

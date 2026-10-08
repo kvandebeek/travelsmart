@@ -23,6 +23,7 @@
     <div class="tabs" role="tablist" aria-label="Map view">
       <button type="button" role="tab" id="tab-from" aria-selected="true">Where can I go from…</button>
       <button type="button" role="tab" id="tab-to" aria-selected="false">How long to reach…</button>
+      <button type="button" role="tab" id="tab-corridor" aria-selected="false" hidden>Along a corridor</button>
     </div>
 
     <section class="panel controls" aria-label="Map controls">
@@ -30,6 +31,8 @@
         <label class="start" data-mode="from">Start from <select id="origin"></select></label>
         <label class="start" data-mode="from">To <select id="destination"></select></label>
         <label class="start" data-mode="to" hidden>Destination <select id="arrive"></select></label>
+        <label class="start" data-mode="corridor" hidden>Corridor <select id="corridor"></select></label>
+        <label class="start" data-mode="corridor" hidden>Direction <select id="direction"></select></label>
       </div>
       <div class="time">
         <div class="time-head">
@@ -43,6 +46,11 @@
         <div class="strip" id="strip" hidden>
           <div class="strip-bar" id="strip-bar" role="img" aria-label="Whole day for this trip, as a colour gradient"><span class="strip-marker" id="strip-marker"></span></div>
           <p class="strip-note" id="strip-note"></p>
+        </div>
+        <div class="strip" data-mode="corridor" hidden>
+          <div class="corridor-bar" id="corridor-bar" role="img" aria-label="The corridor's stretches in order, coloured by how they compare with usual"></div>
+          <div class="corridor-ends"><span id="corridor-start"></span><span id="corridor-end"></span></div>
+          <p class="strip-note" id="corridor-note"></p>
         </div>
       </div>
     </section>
@@ -63,7 +71,7 @@
       </table></div>
     </section>
 
-    <footer>“Busy” compares the usual travel time with an empty road (the route provider's free-flow time; for Google Maps routes, their own fastest 5% of measured times), for departures in the chosen half hour, over all days measured so far. Map © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.</footer>
+    <footer>“Busy” compares the usual travel time with an empty road (the route provider's free-flow time; for Google Maps routes, their own fastest 5% of measured times), for departures in the chosen half hour, over all days measured so far. On a corridor, each stretch is compared with its own usual time instead: the middle of its typical times across the day, each half hour counted once. Map © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors.</footer>
   </main>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script src="map.js"></script>

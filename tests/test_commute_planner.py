@@ -220,6 +220,32 @@ def test_map_summary_places_google_trips_by_municipality():
     assert "nis_72043" not in data["places"]                 # Pelt
     assert data["buckets"][0] == "00:00" and data["buckets"][-1] == "23:30" and len(data["buckets"]) == 48
 
+
+def test_corridor_strip_compares_each_stretch_with_its_usual_time():
+    import csv
+    from travelsmart.commute_export import build_corridors
+    from travelsmart.google_maps_import import google_route_id
+    points = {}
+    for name in ("google_maps_points.csv", "google_maps_stretch_points.csv"):
+        with (ROOT / "config" / name).open(encoding="utf-8-sig", newline="") as file:
+            points.update({row["id"]: row["location"] for row in csv.DictReader(file)})
+    route = google_route_id(points["liege"], points["tongeren"])        # first stretch of liege_oostende
+    def row(hour, minutes):
+        return {"provider": "google_maps", "route_id": route, "status": "ok", "duration_seconds": minutes * 60,
+                "observed_at": f"2026-10-08T{hour - 2:02d}:10:00+00:00"}
+    # Usual = median of the half-hour medians (20, 20, 20, 30) = 20, however often 08:00 was measured.
+    travel = [row(6, 20), row(10, 20), row(13, 20)] + [row(8, 30)] * 7
+    data = build_corridors(travel, ROOT / "config")
+    corridor = next(c for c in data["corridors"] if c["id"] == "liege_oostende")
+    first = corridor["directions"]["forward"][0]
+    assert (first["from"], first["to"], first["usual"]) == ("liege", "tongeren", 20)
+    assert first["stats"]["08:00"] == [7, 0.5, 30] and first["stats"]["06:00"] == [1, 0.0, 20]
+    reverse_last = corridor["directions"]["reverse"][-1]
+    assert (reverse_last["from"], reverse_last["to"], reverse_last["usual"]) == ("tongeren", "liege", None)
+    assert all(len(data["points"][key]["point"]) == 2 for key in ("liege", "tongeren"))
+    # Three half hours are not enough to know a stretch's usual time.
+    assert build_corridors(travel[:2] + travel[3:], ROOT / "config")["corridors"][0]["directions"]["forward"][0]["usual"] is None
+
 def test_corridors_every_regular_slot_both_directions_within_budget():
     schedule, routes = load_plan_inputs()
     polls = plan_month(2026, 10, schedule, routes)

@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,6 +17,7 @@ import yaml
 
 from travelsmart.commute_live import read_observations
 from travelsmart.config import ROOT
+from travelsmart.google_maps_import import google_route_id
 
 
 LATEST_CALLS = 10
@@ -98,8 +100,9 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
     feed = [{key: row[key] for key in LATEST_FIELDS if key in row} for row in reversed(latest)]
     (output_dir / "latest.json").write_text(json.dumps({"generated_at": index["generated_at"], "calls": feed},
                                                        separators=(",", ":")), encoding="utf-8")
-    (output_dir / "map.json").write_text(json.dumps(build_map(routes, catalogue, all_travel, config_dir, index["generated_at"]),
-                                                    separators=(",", ":")), encoding="utf-8")
+    calm_map = build_map(routes, catalogue, all_travel, config_dir, index["generated_at"])
+    calm_map["corridors"] = build_corridors(all_travel, config_dir)
+    (output_dir / "map.json").write_text(json.dumps(calm_map, separators=(",", ":")), encoding="utf-8")
     geometry = config_dir / "commute_geometry.json"  # road paths, scripts/build_map_geometry.py
     if geometry.exists():
         (output_dir / "geometry.json").write_text(geometry.read_text(encoding="utf-8"), encoding="utf-8")
@@ -236,3 +239,67 @@ def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_di
             "places": places, "origins": origins,
             "destinations": {o: sorted(destinations[o], key=lambda key: places[key]["name"]) for o in origins},
             "stats": {o: {d: dict(sorted(b.items())) for d, b in ds.items()} for o, ds in stats.items()}}
+
+
+# --- Corridor strips -----------------------------------------------------------------------
+# Each Google Maps corridor leg is compared with its own usual time: the median of its half-hour
+# medians, so hours that happen to be measured more often do not dominate. Needs data in at least
+# CORRIDOR_USUAL_MIN_BUCKETS half hours. Any collector's captures between the same two locations count.
+CORRIDOR_USUAL_MIN_BUCKETS = 4
+CORRIDOR_LEVELS = [{"id": "quieter", "label": "Quieter than usual", "below": -0.05},
+                   {"id": "usual", "label": "As usual", "below": 0.10},
+                   {"id": "slower", "label": "Slower than usual", "below": 0.30},
+                   {"id": "much_slower", "label": "Much slower than usual", "below": None}]
+COORDINATES = re.compile(r"\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*")
+
+
+def _location_point(location: str, municipality_point: dict[str, list[float]]) -> list[float] | None:
+    """A location's own coordinates, else its municipality's main point (place-name queries)."""
+    match = COORDINATES.fullmatch(location)
+    return [float(match[1]), float(match[2])] if match else municipality_point.get(location)
+
+
+def build_corridors(travel: list[dict], config_dir: Path) -> dict:
+    corridors_file = config_dir / "google_maps_stretch_corridors.yaml"
+    if not corridors_file.exists():
+        return {"levels": CORRIDOR_LEVELS, "points": {}, "corridors": []}
+    points = {}
+    for name in ("google_maps_points.csv", "google_maps_stretch_points.csv"):
+        with (config_dir / name).open(encoding="utf-8-sig", newline="") as file:
+            points.update({row["id"].strip(): {"name": row["name"].strip(), "location": row["location"].strip()}
+                           for row in csv.DictReader(file) if row.get("id")})
+    municipality_point = {}
+    points_file = config_dir / "belgian_municipality_points.csv"
+    locations_file = config_dir / "google_maps_place_municipalities.csv"
+    if points_file.exists() and locations_file.exists():
+        with points_file.open(encoding="utf-8", newline="") as file:
+            by_code = {row["nis_code"]: [float(row["lat"]), float(row["lon"])] for row in csv.DictReader(file)}
+        with locations_file.open(encoding="utf-8", newline="") as file:
+            municipality_point = {row["location"]: by_code[row["nis_code"]] for row in csv.DictReader(file)}
+    minutes: dict[str, dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
+    for row in travel:
+        if row.get("provider") == "google_maps" and row.get("status") == "ok" and row.get("duration_seconds"):
+            minutes[row["route_id"]][_bucket(row["observed_at"])].append(row["duration_seconds"] / 60)
+    corridors, used = [], set()
+    for corridor in yaml.safe_load(corridors_file.read_text(encoding="utf-8"))["corridors"]:
+        nodes = corridor["nodes"]
+        if any(node not in points or not _location_point(points[node]["location"], municipality_point) for node in nodes):
+            continue  # a point without a known position cannot be drawn
+        directions = {}
+        for direction, order in (("forward", nodes), ("reverse", nodes[::-1])):
+            legs = []
+            for origin, destination in zip(order, order[1:]):
+                by_bucket = minutes.get(google_route_id(points[origin]["location"], points[destination]["location"]), {})
+                medians = {bucket: median(values) for bucket, values in by_bucket.items()}
+                usual = median(medians.values()) if len(medians) >= CORRIDOR_USUAL_MIN_BUCKETS else None
+                # stats per half hour: [measurements, share above (+) or below (-) usual, median minutes]
+                legs.append({"from": origin, "to": destination, "usual": round(usual, 1) if usual else None,
+                             "stats": {bucket: [len(by_bucket[bucket]), round(value / usual - 1, 3), round(value)]
+                                       for bucket, value in sorted(medians.items())} if usual else {}})
+            directions[direction] = legs
+        used.update(nodes)
+        corridors.append({"id": corridor["id"], "name": corridor["name"], "directions": directions})
+    return {"levels": CORRIDOR_LEVELS, "usual_min_buckets": CORRIDOR_USUAL_MIN_BUCKETS,
+            "points": {key: {"name": points[key]["name"],
+                             "point": _location_point(points[key]["location"], municipality_point)} for key in sorted(used)},
+            "corridors": corridors}

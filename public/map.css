@@ -5,7 +5,7 @@
   --page: #f3f6f3; --surface: #ffffff; --ink: #172825; --muted: #637771; --line: #d9e3df;
   --accent: #14785e; --chip: #e6f2ec; --chip-ink: #17674f;
   --calm: #0ca30c; --moderate: #fab219; --busy: #ec835a; --very-busy: #d03b3b; --no-data: #898781;
-  --ring: #ffffff; --you: #172825; --data-rgb: 99 119 113;
+  --ring: #ffffff; --you: #172825; --data-rgb: 99 119 113; --quieter: #2a78d6;
   /* Travel time: one blue ramp, short = light, long = dark (validated, ordinal). */
   --t1: #86b6ef; --t2: #5598e7; --t3: #2a78d6; --t4: #1c5cab; --t5: #0d366b;
   font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -14,14 +14,14 @@
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
     --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --muted: #c3c2b7; --line: #2c2c2a;
-    --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff; --data-rgb: 195 194 183;
+    --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff; --data-rgb: 195 194 183; --quieter: #5598e7;
     --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #86b6ef; --t5: #cde2fb;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
   --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --muted: #c3c2b7; --line: #2c2c2a;
-  --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff; --data-rgb: 195 194 183;
+  --accent: #3fbf96; --chip: #1f3a31; --chip-ink: #bfe9da; --ring: #1a1a19; --you: #ffffff; --data-rgb: 195 194 183; --quieter: #5598e7;
     --t1: #184f95; --t2: #256abf; --t3: #3987e5; --t4: #86b6ef; --t5: #cde2fb;
 }
 
@@ -35,8 +35,8 @@ h2 { font-size: 1.35rem; letter-spacing: -.02em; margin: 2px 0; }
 .eyebrow { text-transform: uppercase; letter-spacing: .13em; color: var(--accent); font-size: .7rem; font-weight: 800; margin: 0; }
 .intro { color: var(--muted); margin: 0; max-width: 62ch; }
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; margin-bottom: 16px; }
-.section-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
-.chip { background: var(--chip); color: var(--chip-ink); border-radius: 20px; padding: 7px 11px; font-size: .77rem; font-weight: 700; white-space: nowrap; }
+.section-title { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.chip { background: var(--chip); color: var(--chip-ink); border-radius: 20px; padding: 7px 11px; font-size: .77rem; font-weight: 700; }
 .demo-banner { background: #fff4d6; color: #5c4300; border: 1px solid #f0d58a; border-radius: 10px; padding: 10px 14px; font-weight: 650; margin: 0 0 16px; }
 
 .controls { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 24px; align-items: start; }
@@ -53,6 +53,10 @@ h2 { font-size: 1.35rem; letter-spacing: -.02em; margin: 2px 0; }
 .strip-marker { position: absolute; top: -4px; bottom: -4px; width: 4px; border-radius: 2px; background: var(--ink);
   box-shadow: 0 0 0 2px var(--surface); transform: translateX(-50%); pointer-events: none; }
 .strip-note { color: var(--muted); font-size: .85rem; margin: 8px 0 0; }
+/* Corridor strip: one segment per stretch, in driving order, width by its usual travel time. */
+.corridor-bar { display: flex; gap: 2px; height: 26px; }
+.corridor-bar span { flex: 1 1 0; min-width: 4px; border-radius: 3px; }
+.corridor-ends { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; color: var(--muted); font-size: .78rem; }
 select { width: 100%; min-width: 0; text-overflow: ellipsis; font: inherit; font-weight: 650; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; }
 .time-head { display: flex; align-items: baseline; gap: 10px; color: var(--muted); font-weight: 650; font-size: .85rem; }
 .time-head strong { color: var(--ink); font-size: 1.6rem; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }

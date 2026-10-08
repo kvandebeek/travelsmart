@@ -159,6 +159,8 @@ Use `--run-id second` when running the same selection twice at once; it gives th
 
 Adding adjacent leg times estimates a **journey through those exact listed points**. The measured legs are taken minutes apart, while a driver would enter each later leg at a later time, and Google's fastest full route may bypass some points. Keep those limits in mind when using sums as a corridor estimate.
 
+On the dashboard, the **When is it calm?** map has an **Along a corridor** view instead of summed times. Pick a corridor and direction: each stretch, in driving order, is coloured on the map and in a strip by how it compares with **its own usual time** at the chosen departure time. A stretch's usual time is the median of its half-hour medians, so hours that happen to be measured more often do not dominate; it needs measurements in at least 4 half hours. Captures between the same two locations from any collector count. `summaries.jsonl` stays local and is not used by the dashboard; corridor sums can always be rebuilt from the imported legs (`corridor_run_id`, `leg_index`).
+
 ### Belgian municipality list and directional pairs
 
 `config/belgian_municipalities.csv` contains all 565 Belgian municipalities from [Statbel&#39;s REFNIS register](https://statbel.fgov.be/en/open-data/code-refnis-0), with their official NIS codes and French and Dutch names. `scripts/build_belgian_municipalities.py` refreshes the list from the published CSV. These are municipalities, not every village or neighborhood. Their `location` values are place-name queries; unlike the 18 strategic points, they are not verified road pins.

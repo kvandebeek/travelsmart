@@ -218,6 +218,7 @@ def test_map_summary_places_google_trips_by_municipality():
     assert data["places"][tongeren]["name"] == "Tongeren-Borgloon"
     assert tongeren in data["destinations"]["hasselt"]       # joins the commute town's own entry
     assert "nis_72043" not in data["places"]                 # Pelt
+    assert data["buckets"][0] == "00:00" and data["buckets"][-1] == "23:30" and len(data["buckets"]) == 48
 
 def test_corridors_every_regular_slot_both_directions_within_budget():
     schedule, routes = load_plan_inputs()

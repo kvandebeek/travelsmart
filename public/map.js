@@ -443,8 +443,9 @@ async function start() {
   $('arrive').replaceChildren(...reachable.map(key => option(key, place(key).name)));
   const slider = $('time');
   slider.max = state.data.buckets.length - 1;
-  $('ticks').replaceChildren(...state.data.buckets.filter(b => b.endsWith(':00') && +b.slice(0, 2) % 2 === 1)
-    .map(b => Object.assign(document.createElement('span'), {textContent: b})));
+  // A label every three hours, under the thumb's centre at that time (same travel range as the track).
+  $('ticks').replaceChildren(...state.data.buckets.flatMap((b, index) => b.endsWith(':00') && +b.slice(0, 2) % 3 === 0
+    ? [Object.assign(document.createElement('span'), {textContent: b, style: `--at: ${index / slider.max}`})] : []));
   state.t = defaultTime();
 
   // #diepenbeek, #diepenbeek/brussels or #to/brussels

@@ -1,5 +1,20 @@
 <div align="center">
 
+# 🚗 TravelSmart Belgium
+
+### *When is the best moment to leave?*
+**Real commutes across Belgium, measured live every working day, joined with weather, school holidays, daylight and roadworks.**
+
+[![Commute observations](https://github.com/kvandebeek/travelsmart/actions/workflows/commutes.yml/badge.svg)](https://github.com/kvandebeek/travelsmart/actions/workflows/commutes.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![Runs on GitHub Actions](https://img.shields.io/badge/runs%20on-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
+![Open data](https://img.shields.io/badge/data-open%20%26%20free-2ea44f)
+![No build step](https://img.shields.io/badge/dashboard-zero%20build%20step-ff69b4)
+
+### [📊 Open the live dashboard →](https://kvandebeek.github.io/travelsmart/commutes.html)
+
+</div>
+
 ---
 
 ## 💡 The idea
@@ -101,7 +116,7 @@ python -m http.server --directory public 8080            # http://localhost:8080
 
 ### Local Google Maps travel times
 
-This separate runner opens the Google Maps website in a hidden (headless) local Chromium browser; add `--no-headless` to watch it. It uses no Maps API key and does not feed the dashboard. When Google shows its consent screen, the runner clicks **Reject all**; travel times load the same way. If it cannot find that button, the capture is saved as `consent_required`; with `--no-headless` it instead waits up to 3 minutes for you to choose in the browser window. The runner keeps that browser profile, and the choice, in `data/google_maps_profile/`.
+This separate runner opens the Google Maps website in a hidden (headless) local Chromium browser; add `--no-headless` to watch it. It uses no Maps API key; its captures reach the dashboard after the import step below. When Google shows its consent screen, the runner clicks **Reject all**; travel times load the same way. If it cannot find that button, the capture is saved as `consent_required`; with `--no-headless` it instead waits up to 3 minutes for you to choose in the browser window. The runner keeps that browser profile, and the choice, in `data/google_maps_profile/`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e '.[google-maps-capture]'

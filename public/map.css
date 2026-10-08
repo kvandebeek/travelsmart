@@ -74,7 +74,9 @@ input[type=range]:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--
 .data-key { display: inline-flex; align-items: center; gap: 6px; }
 .data-chip { width: 34px; height: 6px; border-radius: 3px; display: inline-block;
   background: linear-gradient(to right, var(--line), rgb(var(--data-rgb) / 1)); }
-.ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.ticks { position: relative; height: 1.2em; color: var(--muted); font-size: .72rem; font-variant-numeric: tabular-nums; }
+.ticks span { position: absolute; left: calc(10px + (100% - 20px) * var(--at)); transform: translateX(-50%); }
+.ticks span:first-child { transform: translateX(-10px); }  /* keep 00:00 inside the panel */
 
 .map-panel { padding: 0; overflow: hidden; }
 #map { height: min(62vh, 600px); min-height: 360px; background: var(--page); }

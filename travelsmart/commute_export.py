@@ -7,7 +7,7 @@ import hashlib
 import json
 import math
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from zoneinfo import ZoneInfo
@@ -109,7 +109,6 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
 
 # --- "When is it calm?" map -----------------------------------------------------------
 MAP_BUCKET_MINUTES = 30
-MAP_HOURS = (5, 19)            # buckets from 05:00 up to 18:30
 MAP_MIN_SAMPLES = 3            # fewer measurements: shown as "not enough data yet"
 # Google Maps shows no free-flow time: a route's empty-road time is its own 5th-percentile travel time,
 # once it has enough successful measurements for that to mean something.
@@ -122,10 +121,9 @@ MAP_LEVELS = [{"id": "calm", "label": "Calm", "below": 0.10},
               {"id": "very_busy", "label": "Very busy", "below": None}]
 
 
-def _bucket(observed_at: str) -> str | None:
+def _bucket(observed_at: str) -> str:
+    """Brussels half hour of a measurement; the map covers the whole day."""
     local = datetime.fromisoformat(observed_at).astimezone(ZoneInfo("Europe/Brussels"))
-    if not MAP_HOURS[0] <= local.hour < MAP_HOURS[1]:
-        return None
     minute = local.minute - local.minute % MAP_BUCKET_MINUTES
     return f"{local.hour:02d}:{minute:02d}"
 
@@ -221,27 +219,19 @@ def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_di
         if not route or row.get("status") != "ok" or not row.get("freeflow_seconds"):
             continue
         bucket = _bucket(row["observed_at"])
-        if bucket is None:
-            continue
         home, work = route["home_area"], work_key[route["id"]]
         origin, destination = (home, work) if row["direction"] == "morning" else (work, home)
         if origin in origins:
             samples[origin, destination, bucket].append(
                 (row["duration_seconds"] / row["freeflow_seconds"] - 1, row["duration_seconds"] / 60))
     for origin, destination, row, share in google:
-        bucket = _bucket(row["observed_at"])
-        if bucket is not None:
-            samples[origin, destination, bucket].append((share, row["duration_seconds"] / 60))
+        samples[origin, destination, _bucket(row["observed_at"])].append((share, row["duration_seconds"] / 60))
     stats: dict[str, dict] = defaultdict(lambda: defaultdict(dict))
     for (origin, destination, bucket), values in samples.items():
         # [measurements, median congestion share, median travel time in whole minutes]
         stats[origin][destination][bucket] = [len(values), round(max(0.0, median(v[0] for v in values)), 3),
                                               round(median(v[1] for v in values))]
-    buckets = []
-    moment = datetime(2000, 1, 1, MAP_HOURS[0])
-    while moment.hour < MAP_HOURS[1]:
-        buckets.append(moment.strftime("%H:%M"))
-        moment += timedelta(minutes=MAP_BUCKET_MINUTES)
+    buckets = [f"{minute // 60:02d}:{minute % 60:02d}" for minute in range(0, 24 * 60, MAP_BUCKET_MINUTES)]
     return {"generated_at": generated_at, "buckets": buckets, "min_samples": MAP_MIN_SAMPLES, "levels": MAP_LEVELS,
             "places": places, "origins": origins,
             "destinations": {o: sorted(destinations[o], key=lambda key: places[key]["name"]) for o in origins},

@@ -112,13 +112,6 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
         return {"due": len(polls), "attempted": 0, "stored": 0, "reason": "missing_keys",
                 "missing_keys": sorted(missing_keys)}
     anchors = yaml.safe_load((config_dir / "commute_anchors.yaml").read_text(encoding="utf-8"))
-    snapshot = None
-    if provider == "tomtom":
-        try:
-            source = yaml.safe_load((config_dir / "sources.yaml").read_text(encoding="utf-8"))["datex"]["url"]
-            snapshot = fetch_datex_snapshot(source)
-        except (httpx.HTTPError, KeyError, ValueError):
-            pass  # Null context means unavailable, never "zero incidents".
     route_map = {route["id"]: route for route in routes}
     path = observation_path(data_dir, local)
     existing = read_observations(path)
@@ -146,6 +139,18 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
     rolling_used = {account_id: sum(row["provider"] == "tomtom" and row.get("account") == account_id for row in recent)
                     for account_id in accounts}
     here_rolling = sum(row["provider"] == "here" for row in recent)
+    pending = [poll for poll in polls
+               if (provider, poll.account if provider == "tomtom" else "here", poll.route_id, poll.scheduled_at.isoformat())
+               not in completed]
+    if not pending:
+        return {"due": len(polls), "attempted": 0, "stored": 0, "reason": "already_done"}
+    snapshot = None
+    if provider == "tomtom" and any(poll.tier != "corridor" for poll in pending):
+        try:
+            source = yaml.safe_load((config_dir / "sources.yaml").read_text(encoding="utf-8"))["datex"]["url"]
+            snapshot = fetch_datex_snapshot(source)
+        except (httpx.HTTPError, KeyError, ValueError):
+            pass  # Null context means unavailable, never "zero incidents".
     attempts = stored = 0
     for poll in polls:
         account_id = poll.account if provider == "tomtom" else "here"

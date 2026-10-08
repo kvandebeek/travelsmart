@@ -1,0 +1,35 @@
+name: Publish dashboard
+
+# Rebuild the dashboard data from the latest observations and deploy GitHub Pages.
+# Started by the collector loop after new measurements, or by hand.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-deploy  # one deploy at a time; the newest waiting one wins
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: python -m pip install -e .
+      - name: Build static dashboard data
+        run: |
+          python -m travelsmart export
+          python scripts/export_commutes.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - uses: actions/deploy-pages@v4

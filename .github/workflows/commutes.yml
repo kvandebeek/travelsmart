@@ -9,12 +9,7 @@ on:
         description: Started by an external timer (behaves like a scheduled run)
         type: boolean
         default: false
-  schedule:
-    # UTC on purpose: the planner works in Brussels time (summer and winter time),
-    # so a run with no slot due exits without API calls. 03:00-16:55 UTC covers
-    # 05:00-17:30 Brussels in both CET and CEST. Must cover every slot (tests check).
-    - cron: '*/5 3-16 * * 1-5'
-    - cron: '10 10 * * *'   # daily weather join
+  # Automatic collection runs in collector-loop.yml; this workflow is for manual runs and timers.
 
 permissions:
   contents: write
@@ -50,13 +45,13 @@ jobs:
             if [ -n "${!name}" ]; then echo "::notice::$name is set"; else echo "::warning::$name is missing"; fi
           done
       - name: Collect a due commute slot
-        if: github.event_name != 'push' && github.event.schedule != '10 10 * * *'
+        if: github.event_name != 'push'
         env:
           TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
           TOMTOM_API_KEY2: ${{ secrets.TOMTOM_API_KEY2 }}
         run: python scripts/run_commute_tick.py --execute
       - name: Collect a small HERE comparison sample
-        if: github.event_name != 'push' && github.event.schedule != '10 10 * * *'
+        if: github.event_name != 'push'
         env:
           HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
         run: python scripts/run_commute_tick.py --provider here --execute
@@ -67,7 +62,7 @@ jobs:
           TOMTOM_API_KEY2: ${{ secrets.TOMTOM_API_KEY2 }}
         run: python scripts/run_commute_tick.py --stream sample --count 10 --only-if-idle --execute
       - name: Add historical weather to completed observations
-        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '10 10 * * *'
+        if: github.event_name == 'workflow_dispatch'
         run: python scripts/enrich_commute_weather.py
       - name: Commit observation files
         id: commit

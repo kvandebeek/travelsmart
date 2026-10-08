@@ -133,20 +133,19 @@ def _cron_times(workflow: str) -> set[str]:
     return times
 
 
-def test_workflow_triggers_cover_every_planned_time():
-    """Crons are UTC; every Brussels time must be covered in winter (UTC+1) and summer (UTC+2)."""
+def test_collector_loop_triggers_cover_every_planned_time():
+    """The loop runs about 340 minutes after each start attempt (UTC cron). Every planned time,
+    in winter (UTC+1) and summer (UTC+2) time, must fall inside the run of some start attempt."""
     schedule, routes = load_plan_inputs()
-    polls = plan_month(2026, 10, schedule, routes)
-
-    def utc(hhmm: str, offset: int) -> str:
-        hour, minute = map(int, hhmm.split(":"))
-        return f"{(hour - offset) % 24:02d}:{minute:02d}"
-
-    for workflow, tiers in (("commutes.yml", {"core", "rotating"}), ("extra-routes.yml", {"extra"})):
-        planned = {p.scheduled_at.strftime("%H:%M") for p in polls if p.tier in tiers}
-        missing = sorted(f"{t}+{o}" for t in planned for o in (1, 2) if utc(t, o) not in _cron_times(workflow))
-        assert not missing, (workflow, missing)
-
+    planned = {p.scheduled_at.strftime("%H:%M") for p in plan_month(2026, 10, schedule, routes)}
+    starts = sorted(int(t[:2]) * 60 + int(t[3:]) for t in _cron_times("collector-loop.yml"))
+    for hhmm in planned:
+        for offset in (1, 2):
+            minute = (int(hhmm[:2]) - offset) * 60 + int(hhmm[3:])
+            assert any(0 <= minute - start <= 330 for start in starts), (hhmm, offset)
+    for workflow in ("commutes.yml", "extra-routes.yml"):   # no second scheduler measuring the same slots
+        config = yaml.safe_load((ROOT / ".github" / "workflows" / workflow).read_text(encoding="utf-8"))
+        assert "schedule" not in config[True], workflow
 
 def test_daytime_stream_draws_from_everything_and_both_directions():
     schedule, routes = load_plan_inputs()

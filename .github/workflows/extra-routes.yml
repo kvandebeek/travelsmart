@@ -10,9 +10,7 @@ on:
         description: Started by an external timer (behaves like a scheduled run)
         type: boolean
         default: false
-  schedule:
-    # UTC on purpose (see commutes.yml): runs with nothing due exit without API calls.
-    - cron: '*/5 3-16 * * 1-5'
+  # Automatic collection runs in collector-loop.yml; this workflow is for manual runs and timers.
 
 permissions:
   contents: write

@@ -234,10 +234,10 @@ of day, and is published alongside the results.
 | Phase | Delivers |
 |---|---|
 | 0 ✅ | Old routes, corridors and data removed; old cloud collection stopped |
-| 1 (in review) | Network builder: nodes and edges from OpenStreetMap, intended roads, expected lengths; automated topology audit and review map |
-| 2 | Endpoints: open datasets per category, clustering, access edges |
-| 3 | Collectors: TomTom chains, HERE sample, Google edges with exact seconds and road validation; raw SQLite store; 24/7 scheduler for the Pi |
-| 4 | Profiles: cells, usual, provider calibration, publishing; stitched-vs-direct validation |
+| 1 ✅ | Network builder: nodes and edges from OpenStreetMap, intended roads, expected lengths; automated topology audit and review map |
+| 2 ✅ (weights pending) | Endpoints: 14,137 places in 4,098 clusters with access edges, all from the OpenStreetMap extract plus the SNCB feed. The official registers still have to supply the weights (pupils, beds, jobs) |
+| 3 ✅ (mostly) | Collectors: chains, TomTom and HERE clients, Google per-edge collector, road and length validation, raw SQLite store, budget-paced 24/7 scheduler. Google still reports whole minutes (§12) |
+| 4 (started) | Profiles: cells, usual, provider calibration, publishing all build; stitched-vs-direct validation not written |
 | 5 | Pages: trip planner with heatmap (in-browser routing), network view |
 | 6 | Context and significance: school calendar, weather, events; "equally good" bands |
 

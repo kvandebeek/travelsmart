@@ -72,10 +72,15 @@ def main() -> int:
     parser.add_argument("--settle-seconds", type=float, default=1.5)
     parser.add_argument("--headless", action="store_true", default=True)
     parser.add_argument("--seed", type=int, default=20261009)
+    # Google reports whole minutes (§12), so 30 seconds of rounding is 25% of a two-minute edge and
+    # 4% of a twelve-minute one. Pointing it at the longer stretches keeps that error small, and
+    # leaves the short ones to TomTom and HERE, which answer in seconds.
+    parser.add_argument("--min-metres", type=float, default=2000)
     args = parser.parse_args()
 
     network = json.loads(args.network.read_text(encoding="utf-8"))
-    targets = [(edge_id, edge) for edge_id, edge in network["edges"].items() if measurable(edge)]
+    targets = [(edge_id, edge) for edge_id, edge in network["edges"].items()
+               if measurable(edge) and edge["metres"] >= args.min_metres]
     # A stable shuffle, then one slice per runner: every runner measures different edges, and a
     # restart with the same seed picks up the same ordering rather than re-measuring the first few.
     random.Random(args.seed).shuffle(targets)

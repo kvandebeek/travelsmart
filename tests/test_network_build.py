@@ -1,6 +1,6 @@
 """The network builder on small hand-made road layouts (coordinates near 51 N, 5 E)."""
 
-from travelsmart.network.build import MAX_EDGE_METRES, Network, _add_split, build_network, metres
+from travelsmart.network.build import MAX_EDGE_METRES, Network, _add_split, build_network, metres, road_numbers
 from travelsmart.network.connectors import select_network_ways
 from travelsmart.network.osm import (EXIT_ACCESS_HOPS, OsmData, _add_paired_backbone_carriageways,
                                      connector_candidate, exit_access_candidate,
@@ -120,6 +120,23 @@ def test_city_ring_roads_are_included_in_regional_backbone():
     assert wanted({"highway": "secondary", "ref": "R71"})
     assert wanted({"highway": "tertiary", "ref": "N9"})
     assert not wanted({"highway": "secondary", "ref": "N120"})
+
+
+def test_road_numbers_includes_brussels_refs():
+    # A Brussels-Capital Region ref (B201) must reach an edge's "roads" list the same way N/R/A/E
+    # refs do, or audit.py's BACKBONE_REF check never sees it even once wanted() selects the way.
+    assert road_numbers({"ref": "B201"}) == ["B201"]
+    assert road_numbers({"ref": "N70; B201"}) == ["N70", "B201"]
+
+
+def test_non_n_r_backbone_refs_are_included():
+    # Brussels-Capital Region (B201), Flemish regional/motorway-extension roads (A112) and European
+    # route overlays (E314, commonly carried as nat_ref alongside an unrelated int'l ref) are also
+    # backbone-grade, but outside the N/R numbering wanted() otherwise requires.
+    assert wanted({"highway": "trunk", "junction": "roundabout", "ref": "B201"})
+    assert wanted({"highway": "trunk", "ref": "A112"})
+    assert wanted({"highway": "trunk", "ref": "E314", "nat_ref": "A2"})
+    assert not wanted({"highway": "trunk", "ref": "B20120"})  # more digits than any real route number
 
 
 def test_shared_osm_junction_on_carriageway_keeps_through_road_and_regional_turns():

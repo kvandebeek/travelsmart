@@ -29,7 +29,7 @@ REGIONAL_CLUSTER_METRES = 120   # one node per roundabout / dual-carriageway cro
 CONNECTION_CLUSTER_METRES = 500  # the slip roads of one exit
 SNAP_METRES = 120               # an exit joins an N-road node this close
 REGIONAL_REF = re.compile(r"^[NR]\d{1,2}[a-z]?$")
-ROAD_NUMBER = re.compile(r"^[AENR]\d+[a-z]?$")
+ROAD_NUMBER = re.compile(r"^[ABENR]\d+[a-z]?$")
 
 
 def metres(a: tuple[float, float], b: tuple[float, float]) -> float:

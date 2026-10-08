@@ -100,6 +100,31 @@ def test_audit_checks_each_exit_direction_against_the_backbone():
                for issue in report["issues"])
 
 
+def test_audit_recognises_non_n_r_backbone_refs():
+    # Brussels (B201), regional/motorway-extension (A112) and European-route (E314) refs anchor the
+    # backbone too, matching osm.py's wanted(); otherwise an exit reaching only such a road would be
+    # wrongly flagged as having no path to the backbone at all.
+    nodes = {
+        "r1": {"kind": "regional", "lat": 51.0, "lon": 5.0, "roads": ["B201"]},
+        "r2": {"kind": "regional", "lat": 51.0, "lon": 5.001, "roads": ["B201"]},
+        "c": {"kind": "connection", "lat": 51.001, "lon": 5.0, "roads": []},
+        "m": {"kind": "motorway", "lat": 51.002, "lon": 5.0, "roads": ["E40"]},
+    }
+    def edge(start, end, kind, roads=None):
+        return {"from": start, "to": end, "kind": kind, "roads": roads or [],
+                "path": [[nodes[start]["lat"], nodes[start]["lon"]],
+                         [nodes[end]["lat"], nodes[end]["lon"]]]}
+    edges = {
+        "backbone": edge("r1", "r2", "regional", ["B201"]),
+        "local": edge("c", "r1", "regional"),
+        "off": edge("m", "c", "ramp_off"),
+        "on": edge("c", "m", "ramp_on"),
+    }
+    report = audit_network(nodes, edges)
+    assert report["summary"]["exit_connections_without_backbone_path"] == 0
+    assert not any(issue["category"] == "no_backbone_path" for issue in report["issues"])
+
+
 def test_audit_excludes_a_service_area_from_public_exit_path_checks():
     nodes = {
         "c": {"kind": "connection", "lat": 51.0, "lon": 5.0, "roads": [],

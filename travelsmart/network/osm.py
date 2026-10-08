@@ -26,7 +26,13 @@ ROUNDABOUT_ROADS = {"trunk", "primary", "secondary", "tertiary"}
 MAIN_N_ROAD = re.compile(r"(^|;)\s*N\s?[0-9]{1,2}[a-z]?\s*(;|$)")
 LOCAL_N_ROAD = re.compile(r"(^|;)\s*N\s?[0-9]{3}[a-z]?\s*(;|$)")
 RING_ROAD = re.compile(r"(^|;)\s*R\s?[0-9]{1,2}[a-z]?\s*(;|$)")
-SELECTION_VERSION = 13
+# Belgium also numbers backbone-grade roads outside the N/R scheme: "A" (regional roads and
+# motorway-grade extensions, e.g. A112 in Antwerp), "B" (Brussels-Capital Region, e.g. B201) and
+# "E" (European route overlays, e.g. E314). A non-motorway carriageway at a complex interchange or
+# in Brussels often carries only one of these refs, sometimes as nat_ref rather than ref (the AWV
+# convention for a motorway-grade road's own number alongside its E-route overlay).
+AUX_BACKBONE_ROAD = re.compile(r"(^|;)\s*[ABE]\s?[0-9]{1,4}[a-z]?\s*(;|$)")
+SELECTION_VERSION = 14
 EXIT_ACCESS_HOPS = 2
 PROGRESS_EVERY_WAYS = 10_000
 PROGRESS_EVERY_NODES = 50_000
@@ -49,7 +55,9 @@ def wanted(tags: dict) -> bool:
     highway = tags.get("highway", "")
     if highway in MOTORWAY:
         return True
-    if highway in REGIONAL and (MAIN_N_ROAD.search(tags.get("ref", "")) or RING_ROAD.search(tags.get("ref", ""))):
+    if highway in REGIONAL and (MAIN_N_ROAD.search(tags.get("ref", "")) or RING_ROAD.search(tags.get("ref", ""))
+                                 or AUX_BACKBONE_ROAD.search(tags.get("ref", ""))
+                                 or AUX_BACKBONE_ROAD.search(tags.get("nat_ref", ""))):
         return True
     return tags.get("junction") == "roundabout" and highway in ROUNDABOUT_ROADS
 

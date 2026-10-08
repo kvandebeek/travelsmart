@@ -12,7 +12,10 @@ from collections import defaultdict, deque
 
 CELL_METRES = 250
 SEARCH_METRES = 250
-BACKBONE_REF = re.compile(r"^[NR]\s?\d{1,2}[a-z]?$", re.IGNORECASE)
+# N/R are Belgium's main regional-road numbering; A (regional/motorway-grade extensions, e.g.
+# A112), B (Brussels-Capital Region, e.g. B201) and E (European route overlays, e.g. E314) are also
+# backbone-grade but outside that scheme (see AUX_BACKBONE_ROAD in osm.py).
+BACKBONE_REF = re.compile(r"^[NRABE]\s?\d{1,4}[a-z]?$", re.IGNORECASE)
 MOTORWAY_EDGE_KINDS = {"ramp_on", "ramp_off", "ramp_link", "motorway", "transfer", "junction"}
 PUBLIC_EXIT_ROADS = {"trunk", "trunk_link", "primary", "primary_link", "secondary", "secondary_link",
                      "tertiary", "tertiary_link", "unclassified", "residential"}

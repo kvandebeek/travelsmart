@@ -5,7 +5,7 @@ from __future__ import annotations
 import heapq
 import math
 from travelsmart.network.build import Graph
-from travelsmart.network.osm import MAIN_N_ROAD, MOTORWAY, RING_ROAD, OsmData, wanted
+from travelsmart.network.osm import AUX_BACKBONE_ROAD, MAIN_N_ROAD, MOTORWAY, RING_ROAD, OsmData, wanted
 
 # Some valid motorway exits join a three-digit regional road before reaching the main numbered
 # backbone. Fifteen kilometres covers those documented connector corridors without selecting the
@@ -22,7 +22,9 @@ def select_network_ways(data: OsmData, progress=print, update=None) -> OsmData:
     backbone = {way_id for way_id, way in data.ways.items() if wanted(way["tags"])} | data.paired_carriageways
     main = {way_id for way_id in backbone if data.ways[way_id]["tags"].get("highway") not in MOTORWAY
             and (MAIN_N_ROAD.search(data.ways[way_id]["tags"].get("ref", ""))
-                 or RING_ROAD.search(data.ways[way_id]["tags"].get("ref", "")))}
+                 or RING_ROAD.search(data.ways[way_id]["tags"].get("ref", ""))
+                 or AUX_BACKBONE_ROAD.search(data.ways[way_id]["tags"].get("ref", ""))
+                 or AUX_BACKBONE_ROAD.search(data.ways[way_id]["tags"].get("nat_ref", "")))}
     motorway_nodes = {node for way in data.ways.values() if way["tags"].get("highway") in MOTORWAY
                       for node in way["nodes"]}
     local_nodes = {node for way in data.ways.values() if way["tags"].get("highway") not in MOTORWAY

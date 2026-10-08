@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import hashlib
+import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -68,7 +69,7 @@ def append_observation(path: Path, observation: dict) -> None:
 
 
 def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, stream: str = "regular",
-             config_dir: Path = ROOT / "config", data_dir: Path = ROOT / "observations") -> dict:
+             count: int = 10, config_dir: Path = ROOT / "config", data_dir: Path = ROOT / "observations") -> dict:
     """Run the latest due slot; execution requires validated anchors and a key."""
     if now.tzinfo is None:
         raise ValueError("now must be timezone aware")
@@ -78,15 +79,24 @@ def run_tick(now: datetime, *, provider: str = "tomtom", execute: bool = False, 
     if provider == "here" and (schedule["here_daily_limit"] <= 0 or schedule.get("here_monthly_limit", 0) <= 0):
         return {"due": 0, "attempted": 0, "stored": 0, "reason": "here_disabled"}
     local = now.astimezone(ZoneInfo(schedule["timezone"]))
-    if stream not in ("regular", "extra"):
+    if stream not in ("regular", "extra", "sample"):
         raise ValueError(f"Unknown stream: {stream}")
-    if provider == "here" and stream == "extra":
+    if provider == "here" and stream != "regular":
         return {"due": 0, "attempted": 0, "stored": 0, "reason": "here_regular_only"}
-    # Each stream has its own clock: a late regular run must still find its slot
-    # even when a 5-minute extra tick is more recent.
-    planned = [poll for poll in plan_month(local.year, local.month, schedule, routes)
-               if (poll.tier == "extra") == (stream == "extra")]
-    polls = due_polls(now, schedule, planned)
+    if stream == "sample":
+        # Hand-started runs outside the schedule: measure `count` random routes right now, in the
+        # direction of the time of day, on that time's account. Budget caps still apply below.
+        direction = "morning" if local.hour < 12 else "evening"
+        account = schedule["tomtom_accounts"][direction]["id"]
+        chosen = random.Random(now.isoformat()).sample(routes, min(count, len(routes)))
+        stamp = local.replace(second=0, microsecond=0)
+        polls = [PlannedPoll(route["id"], direction, "extra", stamp, account) for route in chosen]
+    else:
+        # Each stream has its own clock: a late regular run must still find its slot
+        # even when a 5-minute extra tick is more recent.
+        planned = [poll for poll in plan_month(local.year, local.month, schedule, routes)
+                   if (poll.tier == "extra") == (stream == "extra")]
+        polls = due_polls(now, schedule, planned)
     if provider == "here":
         polls = [poll for poll in polls if poll.tier != "corridor"]   # corridors are TomTom only
         polls = sorted(polls, key=lambda poll: hashlib.sha256(

@@ -60,6 +60,12 @@ jobs:
         env:
           HERE_API_KEY: ${{ secrets.HERE_API_KEY }}
         run: python scripts/run_commute_tick.py --provider here --execute
+      - name: Started by hand with nothing scheduled - measure 10 random routes now
+        if: github.event_name == 'workflow_dispatch' && !inputs.timer
+        env:
+          TOMTOM_API_KEY: ${{ secrets.TOMTOM_API_KEY }}
+          TOMTOM_API_KEY2: ${{ secrets.TOMTOM_API_KEY2 }}
+        run: python scripts/run_commute_tick.py --stream sample --count 10 --only-if-idle --execute
       - name: Add historical weather to completed observations
         if: github.event_name == 'workflow_dispatch' || github.event.schedule == '10 10 * * *'
         run: python scripts/enrich_commute_weather.py

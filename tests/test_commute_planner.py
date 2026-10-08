@@ -227,3 +227,19 @@ def test_rolling_30_day_cap_spans_the_month_boundary(tmp_path, monkeypatch):
     now = datetime(2026, 10, 7, 7, 12, tzinfo=ZoneInfo("Europe/Brussels"))
     result = commute_live.run_tick(now, execute=True, config_dir=config, data_dir=data)
     assert result["due"] > 0 and result["attempted"] == 0 and calls == []   # calendar month is empty, rolling is full
+
+
+def test_manual_sample_measures_now_in_the_direction_of_the_day(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(commute_live, "fetch_live_route", lambda provider, origin, destination, key:
+                        calls.append(key) or {"distance_m": 20000, "duration_seconds": 1500, "freeflow_seconds": 1200,
+                                              "traffic_delay_seconds": 300, "route_points": None})
+    monkeypatch.setattr(commute_live, "fetch_datex_snapshot", lambda url: None)
+    monkeypatch.setenv("TOMTOM_API_KEY", "morning-key")
+    monkeypatch.setenv("TOMTOM_API_KEY2", "evening-key")
+    night = datetime(2026, 10, 7, 21, 42, tzinfo=ZoneInfo("Europe/Brussels"))
+    assert commute_live.run_tick(night, execute=True, config_dir=ROOT / "config", data_dir=tmp_path)["due"] == 0
+    result = commute_live.run_tick(night, execute=True, stream="sample", count=10, config_dir=ROOT / "config", data_dir=tmp_path)
+    assert result["attempted"] == 10 and set(calls) == {"evening-key"}
+    rows = commute_live.read_observations(tmp_path / "commutes" / "2026-10.jsonl")
+    assert len(rows) == 10 and {r["direction"] for r in rows} == {"evening"} and {r["tier"] for r in rows} == {"extra"}

@@ -1,0 +1,33 @@
+# Consecutive points form short, directed legs. Each corridor is measured in both
+# directions. Shared point IDs always reuse the same configured location.
+corridors:
+  - id: liege_oostende
+    name: Liège to Oostende via Limburg and the E40
+    nodes: [liege, tongeren, bilzen, diepenbeek, hasselt, lummen, diest, aarschot, leuven, brussel, aalst, gent, aalter, brugge, oostende]
+  - id: e313_limburg
+    name: Antwerp to Maasmechelen via the E313 corridor
+    nodes: [antwerpen, herentals, geel, lummen, hasselt, genk, maasmechelen]
+  - id: e314
+    name: Maasmechelen to Leuven via the E314 corridor
+    nodes: [maasmechelen, genk, houthalen, lummen, diest, aarschot, leuven]
+  - id: e17_west
+    name: Antwerp to Tournai via Ghent and Kortrijk
+    nodes: [antwerpen, sint_niklaas, lokeren, gent, waregem, kortrijk, tournai]
+  - id: west_flanders
+    name: Oostende to Tournai via Brugge and Kortrijk
+    nodes: [oostende, brugge, roeselare, kortrijk, tournai]
+  - id: wallonia_e42
+    name: Tournai to Liège across Wallonia
+    nodes: [tournai, peruwelz, mons, la_louviere, charleroi, sambreville, namur, andenne, liege]
+  - id: e411_n4
+    name: Brussels to Arlon via Namur and Bastogne
+    nodes: [brussel, wavre, gembloux, namur, ciney, marche, tenneville, bastogne, martelange, arlon]
+  - id: e19_e420
+    name: Antwerp to Charleroi via Brussels
+    nodes: [antwerpen, mechelen, brussel, halle, nivelles, charleroi]
+  - id: ardennes_e25
+    name: Liège to Arlon via the eastern Ardennes
+    nodes: [liege, verviers, malmedy, st_vith, houffalize, bastogne, arlon]
+  - id: central_east
+    name: Brussels to Liège via Leuven and Tongeren
+    nodes: [brussel, leuven, tienen, sint_truiden, tongeren, liege]

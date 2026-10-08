@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
@@ -30,16 +31,45 @@ def _allowance_used(travel: list[dict], schedule: dict) -> dict:
     return used
 
 
+def _google_place_id(location: str) -> str:
+    return "google_" + hashlib.sha256(location.encode("utf-8")).hexdigest()[:20]
+
+
+def _google_routes(travel: list[dict]) -> tuple[list[dict], dict]:
+    routes = {}
+    areas = {}
+    for row in travel:
+        if row.get("provider") != "google_maps":
+            continue
+        home = _google_place_id(row["origin_location"])
+        work = _google_place_id(row["destination_location"])
+        areas[home] = {"name": row["origin"], "region": "google_maps"}
+        areas[work] = {"name": row["destination"], "region": "google_maps"}
+        routes[row["route_id"]] = {
+            "id": row["route_id"], "home_area": home, "home_id": home,
+            "home_place": row["origin"], "work_area": work, "work_id": work,
+            "work_place": row["destination"], "tier": "google",
+            "road_distance_km": round(row["distance_m"] / 1000, 1) if row.get("distance_m") else None,
+        }
+    return list(routes.values()), areas
+
+
 def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT / "observations",
                     output_dir: Path = ROOT / "public" / "data" / "commutes") -> dict:
     output_dir.mkdir(parents=True, exist_ok=True)
     with (config_dir / "commute_routes.csv").open(encoding="utf-8", newline="") as file:
         routes = list(csv.DictReader(file))
     schedule = yaml.safe_load((config_dir / "commute_schedule.yaml").read_text(encoding="utf-8"))
-    months = sorted(path.stem for path in (data_dir / "commutes").glob("????-??.jsonl"))
+    google = read_observations(data_dir / "google_maps" / "captures.jsonl")
+    google_by_month: dict[str, list[dict]] = defaultdict(list)
+    for row in google:
+        month = datetime.fromisoformat(row["observed_at"]).astimezone(ZoneInfo("Europe/Brussels")).strftime("%Y-%m")
+        google_by_month[month].append(row)
+    months = sorted({path.stem for path in (data_dir / "commutes").glob("????-??.jsonl")} | set(google_by_month))
     month_stats, latest, all_travel = [], [], []
     for month in months:
-        travel = read_observations(data_dir / "commutes" / f"{month}.jsonl")
+        travel = read_observations(data_dir / "commutes" / f"{month}.jsonl") + google_by_month[month]
+        travel.sort(key=lambda row: datetime.fromisoformat(row["observed_at"]))
         weather = {(row["provider"], row.get("account"), row["route_id"], row["observed_at"]): row
                    for row in read_observations(data_dir / "weather" / f"{month}.jsonl")}
         for row in travel:
@@ -48,7 +78,7 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
                 row["weather"] = {"source": joined["source"], "origin": joined["origin"],
                                   "destination": joined["destination"]}
         (output_dir / f"{month}.json").write_text(json.dumps(travel, separators=(",", ":")), encoding="utf-8")
-        latest = sorted(latest + travel, key=lambda row: row["observed_at"])[-LATEST_CALLS:]
+        latest = sorted(latest + travel, key=lambda row: datetime.fromisoformat(row["observed_at"]))[-LATEST_CALLS:]
         all_travel.extend(travel)
         counts = Counter(row["status"] for row in travel)
         month_stats.append({"month": month, "calls": len(travel), "successful": counts["ok"],
@@ -57,7 +87,10 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
                             "allowance_used_percent": _allowance_used(travel, schedule)})
     catalogue = yaml.safe_load((config_dir / "commute_catalogue.yaml").read_text(encoding="utf-8"))
     areas = {key: {"name": area.get("name", key), "region": area["region"]} for key, area in catalogue["areas"].items()}
-    index = {"generated_at": datetime.now(timezone.utc).isoformat(), "routes": routes, "areas": areas,
+    google_routes, google_areas = _google_routes(google)
+    areas.update(google_areas)
+    dashboard_routes = routes + google_routes
+    index = {"generated_at": datetime.now(timezone.utc).isoformat(), "routes": dashboard_routes, "areas": areas,
              "months": month_stats, "weather_source": "Open-Meteo historical reanalysis"}
     (output_dir / "index.json").write_text(json.dumps(index, separators=(",", ":")), encoding="utf-8")
     # A tiny file for the "latest API calls" panel, so it never loads a whole month.
@@ -69,7 +102,8 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
     geometry = config_dir / "commute_geometry.json"  # road paths, scripts/build_map_geometry.py
     if geometry.exists():
         (output_dir / "geometry.json").write_text(geometry.read_text(encoding="utf-8"), encoding="utf-8")
-    return {"months": len(months), "routes": len(routes), "observations": sum(x["calls"] for x in month_stats)}
+    return {"months": len(months), "routes": len(dashboard_routes),
+            "google_routes": len(google_routes), "observations": sum(x["calls"] for x in month_stats)}
 
 
 # --- "When is it calm?" map -----------------------------------------------------------

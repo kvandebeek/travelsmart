@@ -114,6 +114,82 @@ python -m http.server --directory public 8080            # http://localhost:8080
 
 **Collecting on your own fork:** add your TomTom and HERE keys as Actions secrets, using the names in `config/commute_schedule.yaml`. Then enable **Settings → Pages → Source: GitHub Actions** and check the caps in that file against your own plans.
 
+### Local Google Maps travel times
+
+This separate runner opens the Google Maps website in a visible local Chromium browser. It uses no Maps API key and does not feed the dashboard. On first run, handle any Google consent screen in the browser window; the runner keeps that browser profile in `data/google_maps_profile/`.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e '.[google-maps-capture]'
+.\.venv\Scripts\python.exe -m playwright install chromium
+.\.venv\Scripts\python.exe scripts\collect_google_maps.py --origin "Hasselt, Belgium" --origin "Leuven, Belgium" --destination "Brussels, Belgium" --interval-minutes 5
+```
+
+Repeat `--origin` for each starting point, or supply a UTF-8 file with one starting point per line using `--origins-file`. For a Belgium-wide sweep, use the 18 fixed locations in `config/google_maps_points.csv`:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\collect_google_maps.py --points-file config\google_maps_points.csv --dry-run
+.\.venv\Scripts\python.exe scripts\collect_google_maps.py --points-file config\google_maps_points.csv --once
+```
+
+The sweep measures every ordered pair in both directions: 18 × 17 = 306 routes. The points use stable coordinates, drawn mostly from the existing commute catalogue, across the coast, main Flemish and Walloon hubs, Brussels, the Ardennes, and the southeast. The selected routes are reshuffled each sweep, including when collecting a batch or a list of manual origins. The current 1-second default gives about 5 minutes of pauses. Page loading and a 2-second settling pause add more time. Each record has its own timestamp, so results from a sweep should not be treated as simultaneous. In particular, adding A→B and B→C travel times does not necessarily give the live A→C time because the segments are measured at different times and Google may choose different roads.
+
+Without `--once`, the runner repeats full sweeps until Ctrl+C. It aims to start each sweep `--interval-minutes` after the previous one began; if a sweep overruns, it still pauses before starting the next. Tune pacing with `--delay-seconds`, `--jitter-seconds`, and `--settle-seconds`. These pauses cannot guarantee how Google will treat automated visits. Records go into `data/google_maps_captures/captures.jsonl` with the Brussels timestamp, sweep ID, pair position, point IDs, extracted travel time in text and minutes, route card text, and status. Add `--screenshots` only when you want labeled PNGs for review. A `route_not_detected` record means the displayed travel time could not be read automatically; rerun with `--screenshots` to inspect the page.
+
+### Local corridor stretches
+
+The separate stretch runner measures only adjacent points in each corridor, in both directions. `config/google_maps_stretch_corridors.yaml` defines ten chains that intersect across Belgium, including Liège → Tongeren → Bilzen → Diepenbeek → Hasselt → Leuven → Brussels → Ghent → Oostende. It reuses the fixed points above and adds intermediate places from `config/google_maps_stretch_points.csv`.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\collect_google_maps_stretches.py --dry-run
+.\.venv\Scripts\python.exe scripts\collect_google_maps_stretches.py --once
+# Smaller trial: one corridor in one direction
+.\.venv\Scripts\python.exe scripts\collect_google_maps_stretches.py --corridor liege_oostende --direction forward --once
+```
+
+The full set has 138 directed leg checks and at least 2 minutes of 1-second pauses, plus page loading and settling time. All selected legs are shuffled each sweep, including legs within a corridor. Results go to `data/google_maps_stretches/captures.jsonl`; each row includes its corridor, direction, original leg index, shared endpoint IDs, time, duration, and distance. `summaries.jsonl` has one row per corridor and direction, including the sum of leg times and the span between its first and last measurement. Incomplete corridors have no sum. Some extra points use place names rather than coordinate pins, so check their resolved locations before treating sums as precise road measurements. The runner uses a separate visible browser profile, so its first run may show Google's consent screen. Omit `--once` to repeat sweeps.
+
+Adding adjacent leg times estimates a **journey through those exact listed points**. The measured legs are taken minutes apart, while a driver would enter each later leg at a later time, and Google's fastest full route may bypass some points. Keep those limits in mind when using sums as a corridor estimate.
+
+### Belgian municipality list and directional pairs
+
+`config/belgian_municipalities.csv` contains all 565 Belgian municipalities from [Statbel's REFNIS register](https://statbel.fgov.be/en/open-data/code-refnis-0), with their official NIS codes and French and Dutch names. `scripts/build_belgian_municipalities.py` refreshes the list from the published CSV. These are municipalities, not every village or neighborhood. Their `location` values are place-name queries; unlike the 18 strategic points, they are not verified road pins.
+
+```powershell
+.\.venv\Scripts\python.exe scripts\plan_belgian_city_pairs.py --dry-run
+.\.venv\Scripts\python.exe scripts\plan_belgian_city_pairs.py
+```
+
+The pair planner writes `data/belgian_city_pairs.csv`: 318,660 rows, one for every A→B and B→A combination. It makes no map requests. The browser runner can read the municipality file directly and process a small batch drawn from across all municipality pairs, for example:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\collect_google_maps.py --points-file config\belgian_municipalities.csv --batch-start 0 --batch-size 20 --once
+```
+
+The default `--batch-order random` uses seed 42 to spread each batch across the whole pair list, then reshuffles that batch's collection order on every sweep. Use the same seed and nonoverlapping `--batch-start` ranges for parallel batches; their routes will not overlap. `global_pair_index` still identifies each route's position in the original pair list. Change the assignment with `--batch-seed`, or use `--batch-order sequential` to recover the previous contiguous batches. Keep the municipality CSV unchanged while working through a set of batches.
+
+Each random batch gets its own browser profile and output folder, such as `data/google_maps_belgian_municipalities_batch_0_20_random_42_profile/` and `data/google_maps_belgian_municipalities_batch_0_20_random_42_captures/`. This separates new random batches from any earlier sequential batch results. Different batches can run alongside the 18-point sweep. The first run of each new profile may need a Google consent choice in its visible browser window. Starting the **same** batch twice still shares its profile; use a distinct `--profile-dir` for that case.
+
+A full direct sweep would need about 3.7 days of 1-second pauses alone, plus settling and page loading, so the pair plan is primarily an inventory for staged work or offline route estimation. Google's [Maps terms](https://www.google.com/help/terms_maps/) restrict mass downloading and bulk feeds; a delay does not grant permission for bulk collection.
+
+### Import Google Maps captures into the dashboard
+
+After the local browser collectors finish, consolidate every `data/**/captures.jsonl` into `observations/google_maps/captures.jsonl`:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\import_google_maps_captures.py
+.\.venv\Scripts\python.exe scripts\export_commutes.py
+```
+
+The importer converts each capture to the same observation fields used by TomTom and HERE (`provider`, `route_id`, `observed_at`, `duration_seconds`, `distance_m`, and status), keeps Google route names and source details, and skips captures already imported. Failed route reads remain as error observations. It does not invent a free-flow time or traffic delay from Google's page. The dashboard export merges these records into the monthly results, route list, recent feed, and charts. Google routes keep their actual endpoints rather than being treated as identical to a nearby TomTom or HERE commute. The combined observation file is tracked by Git; local `data/` files are not.
+
+When all browser collectors have stopped and the combined file is verified, remove the old capture folders while importing any final captures:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\import_google_maps_captures.py --delete-sources
+```
+
+This removes capture folders and optional screenshots, while keeping browser profile folders. Repeat the import after later collection rounds; existing observations are preserved.
+
 **Changing the places:**
 
 ```bash

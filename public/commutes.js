@@ -16,6 +16,7 @@ const town = area => state.index.areas?.[area]?.name || area;
 const pairOf = route => `${route.home_area}__${route.work_area}`;
 const pairLabel = pair => { const [home, work] = pair.split('__'); return `${town(home)} → ${town(work)}`; };
 const routeOf = row => state.routes.get(row.route_id);
+const providerLabel = provider => ({tomtom:'TomTom', here:'HERE', google_maps:'Google Maps'})[provider] || provider;
 
 function fillPairs(select) {
   const groups = new Map();
@@ -39,6 +40,23 @@ function fillPlaces() {
     [...new Set(routes.map(route => route[field]))].sort((a, b) => a.localeCompare(b)).forEach(name => option(select, name, name));
   }
 }
+function selectDirectionForPair() {
+  const routes = state.index.routes.filter(route => pairOf(route) === $('route').value);
+  $('direction').value = routes.some(route => route.tier === 'google') ? 'direct' : 'morning';
+}
+function selectPairForProvider() {
+  const provider = $('provider').value;
+  if (provider !== 'all') {
+    const pairs = new Set(state.observations.filter(row => row.provider === provider)
+      .map(routeOf).filter(Boolean).map(pairOf));
+    if (pairs.size && !pairs.has($('route').value)) {
+      $('route').value = [...pairs].sort((a, b) => pairLabel(a).localeCompare(pairLabel(b)))[0];
+      fillPlaces();
+      selectDirectionForPair();
+    }
+  }
+  render();
+}
 function setText(id, value) { $(id).textContent = value; }
 // GitHub Pages lets browsers cache files for 10 minutes. The index is always fetched fresh;
 // data files carry its publish time, so a new publish is never hidden by an old copy.
@@ -55,6 +73,7 @@ async function loadMonth() {
     const preferred = 'diepenbeek__brussels';
     $('route').value = observedPairs.has(preferred) ? preferred : [...observedPairs].sort()[0] || preferred;
     fillPlaces();
+    selectDirectionForPair();
   }
   render();
 }
@@ -117,11 +136,11 @@ function renderTable(rows) {
   for (const row of [...rows].sort((a,b)=>b.observed_at.localeCompare(a.observed_at)).slice(0,30)) {
     const tr = document.createElement('tr');
     const school = row.calendar ? `${row.calendar.flanders_school_day ? 'FL school' : 'FL break'} / ${row.calendar.fwb_school_day == null ? 'FWB ?' : row.calendar.fwb_school_day ? 'FWB school' : 'FWB break'}` : '—';
-    const route = routeOf(row), journey = row.direction === 'morning'
+    const route = routeOf(row), journey = row.direction === 'morning' || row.direction === 'direct'
       ? `${route?.home_place} → ${route?.work_place}` : `${route?.work_place} → ${route?.home_place}`;
     const cells = [fmt.format(new Date(row.observed_at)), journey, slot(row), minutes(row.duration_seconds), minutes(delay(row)),
       wet(row) === null ? 'Pending' : wet(row) ? 'Rain' : 'Dry', school, row.calendar?.origin_light || '—',
-      eventState(row), row.provider === 'here' ? 'HERE' : 'TomTom', row.status];
+      eventState(row), providerLabel(row.provider), row.status];
     for (const value of cells) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
     body.append(tr);
   }
@@ -164,7 +183,7 @@ function render() {
   setText('route-title', pairRoutes.length ? pairLabel(pair) : 'Choose a commute');
   setText('route-meta', pairRoutes.length ? `${starts.size} start place${starts.size === 1 ? '' : 's'} (${[...starts].sort().join(', ')}) · ` +
     `${ends.size} employment area${ends.size === 1 ? '' : 's'} (${[...ends].sort().join(', ')}) · ` +
-    `${direction === 'morning' ? 'home → work' : 'work → home'}` : '');
+    `${direction === 'direct' ? 'direct route' : direction === 'morning' ? 'home → work' : 'work → home'}` : '');
   setText('sample-count', `${good.length} samples`);
   setText('median-time', minutes(median(good.map(row => row.duration_seconds))));
   setText('median-delay', minutes(median(good.map(delay).filter(value => value != null))));
@@ -181,20 +200,20 @@ async function renderLatest() {
   const feed = response.ok ? await response.json() : {calls: []};
   if (feed.generated_at) setText('latest-updated', `Updated ${fmt.format(new Date(feed.generated_at))}`);
   for (const row of feed.calls) {
-    const route = routeOf(row);
-    const journey = !route ? row.route_id : row.direction === 'morning'
+  const route = routeOf(row);
+    const journey = !route ? row.route_id : row.direction === 'morning' || row.direction === 'direct'
       ? `${route.home_place} → ${route.work_place}` : `${route.work_place} → ${route.home_place}`;
-    const commute = !route ? '—' : row.direction === 'morning'
+    const commute = !route ? '—' : row.direction === 'morning' || row.direction === 'direct'
       ? `${town(route.home_area)} → ${town(route.work_area)}` : `${town(route.work_area)} → ${town(route.home_area)}`;
     const status = row.status === 'ok' ? 'OK' : row.status === 'error' ? `Error (${row.error_type || '?'})` : row.status;
     const tr = document.createElement('tr');
     for (const value of [fmt.format(new Date(row.observed_at)), commute, journey, tierLabel(row.tier),
-                         minutes(row.duration_seconds), minutes(delay(row)), row.provider === 'here' ? 'HERE' : 'TomTom', status]) {
+                         minutes(row.duration_seconds), minutes(delay(row)), providerLabel(row.provider), status]) {
       const td = document.createElement('td'); td.textContent = value; tr.append(td);
     }
     body.append(tr);
   }
-  if (!body.children.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 8; td.textContent = 'No API calls yet.'; tr.append(td); body.append(tr); }
+  if (!body.children.length) { const tr = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 8; td.textContent = 'No observations yet.'; tr.append(td); body.append(tr); }
 }
 
 async function start() {
@@ -205,8 +224,9 @@ async function start() {
     state.index.months.slice().reverse().forEach(item => option($('month'), item.month, item.month));
     state.routes = new Map(state.index.routes.map(route => [route.id, route]));
     fillPairs($('route')); fillPlaces();
-    $('route').addEventListener('change', () => { fillPlaces(); render(); });
-    ['home-place','work-place','direction','provider','rain','school','light','events','weekday'].forEach(id => $(id).addEventListener('change', render));
+    $('route').addEventListener('change', () => { fillPlaces(); selectDirectionForPair(); render(); });
+    ['home-place','work-place','direction','rain','school','light','events','weekday'].forEach(id => $(id).addEventListener('change', render));
+    $('provider').addEventListener('change', selectPairForProvider);
     $('month').addEventListener('change', () => loadMonth().catch(showError));
     renderLatest().catch(() => {});
     await loadMonth();

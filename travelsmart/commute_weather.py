@@ -37,7 +37,7 @@ def enrich_day(day: date, *, config_dir: Path = ROOT / "config", data_dir: Path 
     anchors = yaml.safe_load((config_dir / "commute_anchors.yaml").read_text(encoding="utf-8"))
     zone = ZoneInfo("Europe/Brussels")
     path = observation_path(data_dir, datetime.combine(day, datetime.min.time()))
-    observations = [row for row in read_observations(path) if row["status"] == "ok" and
+    observations = [row for row in read_observations(path) if row["provider"] in ("tomtom", "here") and row["status"] == "ok" and
                     datetime.fromisoformat(row["observed_at"]).astimezone(zone).date() == day]
     output = data_dir / "weather" / f"{day:%Y-%m}.jsonl"
     existing = {(row["provider"], row.get("account"), row["route_id"], row["observed_at"]) for row in read_observations(output)}

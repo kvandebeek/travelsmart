@@ -35,15 +35,27 @@
            font: inherit; font-weight: 600; cursor: pointer; }
   button[disabled] { opacity: .5; cursor: default; }
   code { color: var(--accent); }
+  .search { position: relative; margin-bottom: 10px; }
+  .search input { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line);
+                  background: var(--bg); color: var(--text); font: inherit; }
+  #results { position: absolute; z-index: 5; left: 0; right: 0; background: var(--panel);
+             border: 1px solid var(--line); border-radius: 6px; margin-top: 2px; overflow: hidden; }
+  #results div { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+  #results div:hover { background: var(--line); }
+  #results .kind { color: var(--muted); font-size: 11px; margin-left: 6px; }
 </style>
 </head>
 <body>
 <header>
   <h1>When should I leave?</h1>
-  <p class="lede">Click the map twice: once for where you start, once for where you are going.</p>
+  <p class="lede">Search for a place, or click the map twice: where you start, then where you are going.</p>
 </header>
 <main>
   <section class="panel">
+    <div class="search">
+      <input id="query" type="search" placeholder="Search a station, school, hospital…" autocomplete="off">
+      <div id="results"></div>
+    </div>
     <svg id="map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-label="Belgian road network"></svg>
     <p class="status" id="picks">Loading the network…</p>
     <button id="reset" disabled>Start again</button>
@@ -61,7 +73,7 @@
 <script>
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const HALF_HOURS = 48, WEEKDAYS = 7;
-let graph = null, profiles = null, picks = [], bounds = null;
+let graph = null, profiles = null, picks = [], bounds = null, currentAspect = 1;
 
 const el = (id) => document.getElementById(id);
 
@@ -78,7 +90,10 @@ async function load() {
     graph.out.get(edge[0]).push(index);
   });
   drawMap();
-  el("picks").textContent = `${graph.nodes.length.toLocaleString()} junctions, ` +
+  const junctions = graph.junctionCount ?? graph.nodes.length;
+  el("picks").textContent =
+    `${junctions.toLocaleString()} junctions and ` +
+    `${(graph.nodes.length - junctions).toLocaleString()} places to start from, ` +
     `${graph.edges.length.toLocaleString()} stretches, ` +
     `${Object.keys(profiles).length.toLocaleString()} of them measured so far.`;
 }
@@ -95,9 +110,10 @@ function drawMap() {
   bounds = { south: Math.min(...lats), north: Math.max(...lats),
              west: Math.min(...lons), east: Math.max(...lons) };
   const aspect = (bounds.north - bounds.south) * 111 / ((bounds.east - bounds.west) * 70);
+  currentAspect = aspect;
   const map = el("map");
   map.setAttribute("viewBox", `0 0 100 ${(100 * aspect).toFixed(1)}`);
-  const dots = graph.nodes.map(node => {
+  const dots = graph.nodes.slice(0, graph.junctionCount ?? graph.nodes.length).map(node => {
     const [x, y] = project(node);
     return `<circle class="dot" cx="${x.toFixed(2)}" cy="${(y * aspect).toFixed(2)}" r="0.22"/>`;
   }).join("");
@@ -110,7 +126,7 @@ function onPick(event, aspect) {
   const x = (event.clientX - box.left) / box.width * 100;
   const y = (event.clientY - box.top) / box.height * 100 / aspect;
   let best = -1, bestDistance = Infinity;
-  graph.nodes.forEach((node, index) => {
+  graph.nodes.slice(0, graph.junctionCount ?? graph.nodes.length).forEach((node, index) => {
     const [nx, ny] = project(node);
     const distance = (nx - x) ** 2 + (ny - y) ** 2;
     if (distance < bestDistance) { bestDistance = distance; best = index; }
@@ -288,13 +304,42 @@ function colour(value, quickest, slowest) {
   return `hsl(${hue} 55% ${share > 0.75 ? 48 : 42}%)`;
 }
 
+const indexOfNode = new Map();
+function placeIndex(clusterId) {
+  if (!indexOfNode.size) graph.nodeIds.forEach((id, index) => indexOfNode.set(id, index));
+  return indexOfNode.get(clusterId);
+}
+
+el("query").oninput = () => {
+  const text = el("query").value.trim().toLowerCase();
+  const list = el("results");
+  if (text.length < 2 || !graph || !graph.places) { list.innerHTML = ""; return; }
+  const hits = graph.places.filter(([name]) => name.toLowerCase().includes(text)).slice(0, 8);
+  list.innerHTML = hits.map(([name, category, cluster]) =>
+    `<div data-cluster="${cluster}">${name}<span class="kind">${category.replace("_", " ")}</span></div>`).join("");
+  list.querySelectorAll("div").forEach(row => {
+    row.onclick = () => {
+      const index = placeIndex(row.dataset.cluster);
+      if (index === undefined) return;
+      if (picks.length >= 2) picks = [];
+      picks.push(index);
+      el("query").value = ""; list.innerHTML = "";
+      drawPicks(currentAspect);
+      el("reset").disabled = false;
+      if (picks.length === 2) plan();
+      else el("picks").textContent = "Now choose where you are going.";
+    };
+  });
+};
+
 el("reset").onclick = () => {
   picks = [];
   el("marks").innerHTML = "";
   el("heatmap").innerHTML = "";
   el("summary").textContent = "";
-  el("picks").textContent = "Click the map where you start.";
+  el("picks").textContent = "Click the map where you start, or search for a place.";
   el("reset").disabled = true;
+  el("query").value = ""; el("results").innerHTML = "";
 };
 
 load().catch(error => { el("picks").textContent = `Could not load the network: ${error}`; });

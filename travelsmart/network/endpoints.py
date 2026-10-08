@@ -23,6 +23,9 @@ BELGIUM_BOUNDS = (49.40, 2.50, 51.60, 6.45)
 # The SNCB feed also lists stops in Luxembourg, France, Germany and the Netherlands. Their station
 # codes carry the UIC country code, which separates them exactly where a bounding box cannot.
 BELGIAN_UIC = "88"
+# A landuse polygon this small is a workshop or a corner shop, not a destination worth measuring.
+MIN_ZONE_HECTARES = 2.0
+OSM_ENDPOINT_VERSION = 2
 SNAP_METRES = 2_000         # an endpoint further than this from a selected road gets no access edge
 MAX_ACCESS_METRES = 5_000   # §4: access edges are 0.5-5 km
 ACCESS_NODES = 2            # §4: an endpoint cluster links to its 1-2 nearest network nodes
@@ -84,6 +87,142 @@ def read_gtfs_stations(rows) -> list[Endpoint]:
         stations.append(Endpoint(id=f"station:{stop_id}", category="station",
                                  name=(row.get("stop_name") or "").strip(), lat=lat, lon=lon))
     return stations
+
+
+def endpoint_category(tags: dict) -> str | None:
+    """The endpoint category an OpenStreetMap feature belongs to, or None (§3.3).
+
+    Stations come from the railway's own feed; everything here is read from the extract that already
+    builds the roads, which covers the whole country in one format. The official registers per region
+    carry the weights (pupils, beds, jobs) and can enrich these later; this is where they are.
+    """
+    if tags.get("amenity") == "school":
+        return "school"
+    if tags.get("amenity") == "hospital":
+        return "hospital"
+    if tags.get("office") == "government" or tags.get("amenity") == "townhall":
+        return "government"
+    if tags.get("amenity") == "parking" and tags.get("park_ride", "no") != "no":
+        return "park_ride"
+    if tags.get("aeroway") == "aerodrome":
+        return "airport"
+    if tags.get("landuse") in ("industrial", "commercial"):
+        return "business_park"
+    if tags.get("shop") == "mall" or tags.get("landuse") == "retail":
+        return "retail"
+    return None
+
+
+ZONE_CATEGORIES = {"business_park", "retail", "airport"}   # judged by area, so only as a polygon
+
+
+def _hectares(ring: list[tuple[float, float]]) -> float:
+    """Area of a closed ring of (lat, lon), projected to rough metres at Belgium's latitude."""
+    points = [(lon * 70_000, lat * 111_200) for lat, lon in ring]
+    twice = sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(points, points[1:] + points[:1]))
+    return abs(twice) / 2 / 10_000
+
+
+def _centroid(ring: list[tuple[float, float]]) -> tuple[float, float]:
+    return sum(p[0] for p in ring) / len(ring), sum(p[1] for p in ring) / len(ring)
+
+
+DUPLICATE_METRES = 100
+
+
+def deduplicate(endpoints: list[Endpoint]) -> list[Endpoint]:
+    """Drop the second copy of a place mapped both as a point and as an outline.
+
+    OpenStreetMap often carries a school as a node *and* as the polygon around it. Both land within a
+    few dozen metres, so without this one school becomes two endpoints. Two places of the same kind
+    that close together are only treated as one when their names agree, or one of them has no name.
+    """
+    kept: list[Endpoint] = []
+    grid = Grid()
+    # The outline carries the area, so it is the copy worth keeping: offer those first.
+    for endpoint in sorted(endpoints, key=lambda e: (-e.weight, e.id)):
+        point = (endpoint.lat, endpoint.lon)
+        duplicate = False
+        for other, where in grid.near(point, DUPLICATE_METRES):
+            if (other.category == endpoint.category and metres(point, where) <= DUPLICATE_METRES
+                    and (not other.name or not endpoint.name or other.name == endpoint.name)):
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(endpoint)
+            grid.add(endpoint, point)
+    return kept
+
+
+def load_osm_endpoints(extract, progress=print) -> list[Endpoint]:
+    """Schools, hospitals, government offices, park-and-ride, business parks and large attractors.
+
+    Two passes keep memory low, as in osm.py: first the matching nodes and the ways worth keeping,
+    then only the coordinates those ways use. The result is cached beside the extract, because this
+    walks the whole country and the answer only changes when the extract does.
+    """
+    import json
+    from pathlib import Path
+
+    import osmium
+
+    extract = Path(extract)
+    cache = extract.with_suffix(".endpoints.json")
+    stamp = [extract.stat().st_size, extract.stat().st_mtime_ns]
+    if cache.exists():
+        saved = json.loads(cache.read_text(encoding="utf-8"))
+        if saved.get("extract_stamp") == stamp and saved.get("version") == OSM_ENDPOINT_VERSION:
+            progress(f"Using cached OpenStreetMap endpoints from {cache}")
+            return [Endpoint(**row) for row in saved["endpoints"]]
+
+    progress("endpoint scan 0%: reading places from the extract")
+    found: list[Endpoint] = []
+    areas: dict[int, tuple[str, dict, list[int]]] = {}
+    for scanned, obj in enumerate(osmium.FileProcessor(str(extract), osmium.osm.NODE | osmium.osm.WAY), 1):
+        tags = dict(obj.tags)
+        category = endpoint_category(tags)
+        if category:
+            if isinstance(obj, osmium.osm.Node):
+                if category not in ZONE_CATEGORIES and in_belgium(obj.location.lat, obj.location.lon):
+                    found.append(Endpoint(id=f"{category}:n{obj.id}", category=category,
+                                          name=(tags.get("name") or "").strip(),
+                                          lat=round(obj.location.lat, 7), lon=round(obj.location.lon, 7)))
+            else:
+                areas[obj.id] = (category, tags, [node.ref for node in obj.nodes])
+        if scanned % 1_000_000 == 0:
+            progress(f"endpoint scan 0%: reading places from the extract "
+                     f"({scanned:,} objects; {len(found):,} points, {len(areas):,} areas)")
+
+    needed = {node for _, _, refs in areas.values() for node in refs}
+    progress(f"endpoint scan 50%: reading coordinates for {len(areas):,} areas")
+    points: dict[int, tuple[float, float]] = {}
+    for node in osmium.FileProcessor(str(extract), osmium.osm.NODE).with_filter(osmium.filter.IdFilter(needed)):
+        points[node.id] = (node.location.lat, node.location.lon)
+
+    for way_id, (category, tags, refs) in areas.items():
+        ring = [points[ref] for ref in refs if ref in points]
+        if len(ring) < 3:
+            continue
+        hectares = _hectares(ring)
+        if category in ZONE_CATEGORIES and hectares < MIN_ZONE_HECTARES:
+            continue
+        lat, lon = _centroid(ring)
+        if not in_belgium(lat, lon):
+            continue
+        found.append(Endpoint(id=f"{category}:w{way_id}", category=category,
+                              name=(tags.get("name") or "").strip(), lat=round(lat, 7), lon=round(lon, 7),
+                              weight=round(hectares, 2) if category in ZONE_CATEGORIES else 0.0))
+    before = len(found)
+    found = deduplicate(found)
+    progress(f"endpoint scan 100%: {len(found):,} places read "
+             f"({before - len(found):,} duplicate points inside their own outline dropped)")
+
+    partial = cache.with_suffix(".partial")
+    partial.write_text(json.dumps({"extract_stamp": stamp, "version": OSM_ENDPOINT_VERSION,
+                                   "endpoints": [vars(e) for e in found]}, separators=(",", ":")),
+                       encoding="utf-8")
+    partial.replace(cache)
+    return found
 
 
 class _Reversed:

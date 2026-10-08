@@ -1,7 +1,7 @@
 """Endpoints snap to the network, share a cluster and get an access edge per direction."""
 
-from travelsmart.network.endpoints import (Endpoint, build_endpoints, in_belgium,
-                                           read_gtfs_stations)
+from travelsmart.network.endpoints import (Endpoint, _hectares, build_endpoints, deduplicate,
+                                           endpoint_category, in_belgium, read_gtfs_stations)
 from travelsmart.network.osm import OsmData
 
 LAT, LON = 51.0, 5.0
@@ -140,6 +140,50 @@ def test_luxembourg_is_dropped_by_its_uic_code_where_the_bounding_box_cannot():
              "location_type": "1", "parent_station": ""}]
     assert in_belgium(49.6002, 6.1342)      # the rough box cannot tell these apart
     assert [s.id for s in read_gtfs_stations(rows)] == ["station:8866001"]
+
+
+def test_osm_tags_map_to_endpoint_categories():
+    assert endpoint_category({"amenity": "school"}) == "school"
+    assert endpoint_category({"amenity": "hospital"}) == "hospital"
+    assert endpoint_category({"office": "government"}) == "government"
+    assert endpoint_category({"amenity": "townhall"}) == "government"
+    assert endpoint_category({"amenity": "parking", "park_ride": "yes"}) == "park_ride"
+    assert endpoint_category({"landuse": "industrial"}) == "business_park"
+    assert endpoint_category({"aeroway": "aerodrome"}) == "airport"
+    assert endpoint_category({"shop": "mall"}) == "retail"
+
+
+def test_an_ordinary_car_park_and_an_ordinary_road_are_not_endpoints():
+    assert endpoint_category({"amenity": "parking"}) is None
+    assert endpoint_category({"amenity": "parking", "park_ride": "no"}) is None
+    assert endpoint_category({"highway": "residential"}) is None
+    assert endpoint_category({}) is None
+
+
+def test_a_place_mapped_as_both_a_point_and_an_outline_counts_once():
+    here = at(0, 0)
+    nearby = at(0.05, 0)        # 50 m away: the node inside its own school grounds
+    outline = Endpoint("school:w1", "school", "Sint-Jan", here[0], here[1], weight=3.0)
+    node = Endpoint("school:n1", "school", "Sint-Jan", nearby[0], nearby[1])
+    kept = deduplicate([node, outline])
+    assert [e.id for e in kept] == ["school:w1"]      # the outline wins: it carries the area
+
+
+def test_deduplication_keeps_two_different_places_and_two_different_kinds():
+    here, nearby, far = at(0, 0), at(0.05, 0), at(1, 0)
+    pairs = [
+        Endpoint("school:n1", "school", "Sint-Jan", here[0], here[1]),
+        Endpoint("school:n2", "school", "Sint-Pieter", nearby[0], nearby[1]),   # another school next door
+        Endpoint("hospital:n3", "hospital", "Sint-Jan", nearby[0], nearby[1]),  # a different kind
+        Endpoint("school:n4", "school", "Sint-Jan", far[0], far[1]),            # same name, 1 km away
+    ]
+    assert len(deduplicate(pairs)) == 4
+
+
+def test_zone_area_is_measured_in_hectares():
+    # A square of roughly 1 km x 1 km around 51 N is about 100 hectares.
+    ring = [(LAT, LON), (LAT, LON + KM_LON), (LAT + KM_LAT, LON + KM_LON), (LAT + KM_LAT, LON)]
+    assert 90 < _hectares(ring) < 110
 
 
 def test_belgium_bounds_are_a_rough_guard():

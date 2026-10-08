@@ -29,6 +29,7 @@ The project is being rebuilt around that network. **[docs/network-design.md](doc
 
 What works today:
 
+- **Phase 1 network builder**: reads a local Geofabrik Belgium OpenStreetMap extract and builds a directed road graph with a browser review map.
 - **Google Maps browser collector**: `scripts/collect_google_maps.py` reads every route option Google lists (time, distance, road and traffic note) in a headless browser. It is the engine the new edge collector will build on.
 - **Capture import**: `scripts/import_google_maps_captures.py` merges local captures into one observation file with each route's road numbers and alternatives.
 - **Open-data feeds and the OSRM baseline** (below).
@@ -52,6 +53,30 @@ python scripts/import_google_maps_captures.py
 ```
 
 The collector opens a fresh browser tab for every route: with some browser profiles Chromium otherwise keeps one page process per visit alive until the machine runs out of memory. When Google shows its consent screen, it clicks **Reject all**; if that fails, the capture is stored as `consent_required`.
+
+Build and inspect the road network (the 696 MB extract and generated JSON stay in `data/`, outside Git):
+
+```bash
+python -m pip install -e ".[network]"
+python scripts/build_network.py --download   # later runs can omit --download
+python -m http.server 8000
+```
+
+Open `http://localhost:8000/docs/network-review.html`. The map shows all graph nodes at every zoom level, with filters for motorway, connection, regional and split nodes. Click a node or road to inspect it.
+
+Every build also writes `data/network/audit.json`. Its automatic checks flag missing links at OSM
+junctions, local roads still needed to connect exits, disconnected components, isolated nodes, and
+road ends that stop near another road. The review map circles those candidates and can jump between
+them. Nearby lines may be bridges or parallel carriageways, so the audit does not join roads based
+only on distance. The map precomputes road paths and skips geometry outside the viewport, keeping
+panning and zooming responsive. The graph is still in review: the current audit found no missing
+links at numbered OSM junctions and no unrepresented OSM junctions. It found 31 public-road exit connections
+without a selected local path to the numbered backbone, 17 direction gaps, and 80 proximity
+candidates. The checks are automatic; the map helps inspect individual flags when needed.
+
+![All 6,714 network nodes on the local review map](docs/network-nodes.png)
+
+![Automated topology flags on the Belgian network](docs/network-audit.png)
 
 <details>
 <summary><b>🗺️ Also included: an OSRM baseline and Flemish live feeds</b></summary>
@@ -78,7 +103,7 @@ OSRM has no live traffic. It is close to reality on rural roads but optimistic i
 | [Statbel](https://statbel.fgov.be/en/open-data) | Municipalities, population per statistical sector | Open data licence |
 | [Vlaams Verkeerscentrum DATEX II](https://www.verkeerscentrum.be/) | Road events | CC BY. © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum |
 | [MIV open data](https://miv-opendata.belfla.be/) | Loop-detector speeds | Open data |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) via Overpass, OSRM and Nominatim | Road network, junctions, baseline | ODbL |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) via Geofabrik, OSRM and Nominatim | Road network, junctions, baseline | ODbL |
 
 <div align="center">
 <br/>

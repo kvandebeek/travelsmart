@@ -1,0 +1,137 @@
+"""Road data for the network from OpenStreetMap (data © OpenStreetMap contributors, ODbL).
+
+Read from Geofabrik's daily Belgium extract (a .osm.pbf file), so building the network needs no
+query server. Download it to data/osm/ with `python scripts/build_network.py --download`.
+Two passes keep memory low: first the selected roads, then only the coordinates they use.
+"""
+
+from __future__ import annotations
+
+import re
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from travelsmart.config import ROOT
+
+EXTRACT_URL = "https://download.geofabrik.de/europe/belgium-latest.osm.pbf"
+EXTRACT = ROOT / "data" / "osm" / "belgium-latest.osm.pbf"
+# Backbone roads: motorways with their slip roads, and the main regional roads N1-N99 (with lettered
+# variants such as N1a). Roundabouts without a road number connect N-road pieces, so they come too.
+MOTORWAY = {"motorway", "motorway_link"}
+REGIONAL = {"trunk", "trunk_link", "primary", "primary_link", "secondary", "secondary_link",
+            "tertiary", "tertiary_link", "unclassified", "residential"}
+ROUNDABOUT_ROADS = {"trunk", "primary", "secondary", "tertiary"}
+MAIN_N_ROAD = re.compile(r"(^|;)\s*N\s?[0-9]{1,2}[a-z]?\s*(;|$)")
+LOCAL_N_ROAD = re.compile(r"(^|;)\s*N\s?[0-9]{3}[a-z]?\s*(;|$)")
+RING_ROAD = re.compile(r"(^|;)\s*R\s?[0-9]{1,2}[a-z]?\s*(;|$)")
+SELECTION_VERSION = 8
+EXIT_ACCESS_HOPS = 2
+
+
+@dataclass
+class OsmData:
+    """Ways (id -> {"nodes": [...], "tags": {...}}), node coordinates and motorway-junction tags."""
+    ways: dict[int, dict] = field(default_factory=dict)
+    points: dict[int, tuple[float, float]] = field(default_factory=dict)
+    junctions: dict[int, dict] = field(default_factory=dict)
+    access_classes: dict[int, set[str]] = field(default_factory=dict)
+
+
+def wanted(tags: dict) -> bool:
+    highway = tags.get("highway", "")
+    if highway in MOTORWAY:
+        return True
+    if highway in REGIONAL and (MAIN_N_ROAD.search(tags.get("ref", "")) or RING_ROAD.search(tags.get("ref", ""))):
+        return True
+    return tags.get("junction") == "roundabout" and highway in ROUNDABOUT_ROADS
+
+
+def connector_candidate(tags: dict) -> bool:
+    """Roads that may fill a short gap from an exit to the numbered backbone."""
+    highway = tags.get("highway", "")
+    if any(tags.get(key) in {"no", "private"} for key in ("access", "vehicle", "motor_vehicle")):
+        return False
+    return (highway in REGIONAL and LOCAL_N_ROAD.search(tags.get("ref", "")) is not None or
+            highway in {"trunk_link", "primary_link", "secondary_link", "tertiary_link",
+                        "primary", "secondary", "tertiary"})
+
+
+def exit_access_candidate(tags: dict) -> bool:
+    """Small public roads that meet a slip road directly.
+
+    Keeping this narrow preserves the compact graph while allowing exits whose first public road is
+    unnumbered. Service roads remain outside the routing network.
+    """
+    if any(tags.get(key) in {"no", "private"} for key in ("access", "vehicle", "motor_vehicle")):
+        return False
+    return tags.get("highway") in {"unclassified", "residential"}
+
+
+def load_belgium(extract: Path = EXTRACT, progress=print) -> OsmData:
+    import osmium   # optional dependency: pip install osmium
+
+    if not extract.exists():
+        raise FileNotFoundError(f"{extract} is missing; run scripts/build_network.py --download first")
+    cache = extract.with_suffix(".roads.json")
+    stamp = [extract.stat().st_size, extract.stat().st_mtime_ns]
+    if cache.exists():
+        saved = json.loads(cache.read_text(encoding="utf-8"))
+        if saved.get("extract_stamp") == stamp and saved.get("selection_version") == SELECTION_VERSION:
+            progress(f"Using cached road selection from {cache}")
+            return OsmData(
+                ways={int(k): v for k, v in saved["ways"].items()},
+                points={int(k): tuple(v) for k, v in saved["points"].items()},
+                junctions={int(k): v for k, v in saved["junctions"].items()},
+                access_classes={int(k): set(v) for k, v in saved.get("access_classes", {}).items()},
+            )
+    data = OsmData()
+    progress("OSM scan 0%: selecting backbone and candidate connector roads")
+    for way in osmium.FileProcessor(str(extract), osmium.osm.WAY):
+        tags = dict(way.tags)
+        if wanted(tags) or connector_candidate(tags):
+            data.ways[way.id] = {"nodes": [node.ref for node in way.nodes], "tags": tags}
+    progress("OSM scan 25%: expanding public roads at motorway exits")
+    # A local street at an exit is useful even without an N-number. Limit these additions to ways
+    # that physically meet a motorway_link, so this does not pull Belgium's whole street network.
+    slip_nodes = {node for way in data.ways.values()
+                  if way["tags"].get("highway") == "motorway_link" for node in way["nodes"]}
+    access_added = []
+    frontier = slip_nodes
+    for hop in range(EXIT_ACCESS_HOPS):
+        next_frontier = set()
+        added = 0
+        for way in osmium.FileProcessor(str(extract), osmium.osm.WAY):
+            tags = dict(way.tags)
+            nodes = [node.ref for node in way.nodes]
+            if hop == 0:
+                for node in set(nodes) & slip_nodes:
+                    data.access_classes.setdefault(node, set()).add(tags.get("highway", ""))
+            if exit_access_candidate(tags) and way.id not in data.ways and set(nodes) & frontier:
+                data.ways[way.id] = {"nodes": nodes, "tags": tags}
+                next_frontier.update(nodes)
+                added += 1
+        access_added.append(added)
+        frontier = next_frontier
+        progress(f"OSM scan {50 + hop * 25}%: completed exit-access expansion {hop + 1}/{EXIT_ACCESS_HOPS}")
+        if not frontier:
+            break
+    progress(f"{len(data.ways):,} road ways selected "
+             f"({access_added[0]:,} direct and {sum(access_added[1:]):,} extended exit-access ways)")
+    needed = {node for way in data.ways.values() for node in way["nodes"]}
+    progress("OSM scan 75%: reading coordinates for selected roads")
+    for node in osmium.FileProcessor(str(extract), osmium.osm.NODE).with_filter(osmium.filter.IdFilter(needed)):
+        data.points[node.id] = (node.location.lat, node.location.lon)
+        if node.tags.get("highway") == "motorway_junction":
+            data.junctions[node.id] = dict(node.tags)
+    progress(f"{len(data.points):,} points read, {len(data.junctions):,} motorway junctions")
+    progress("OSM scan 100%: source cache ready")
+    partial = cache.with_suffix(".partial")
+    with partial.open("w", encoding="utf-8") as file:
+        json.dump({"extract_stamp": stamp, "selection_version": SELECTION_VERSION,
+                   "ways": data.ways, "points": data.points,
+                   "junctions": data.junctions,
+                   "access_classes": {node: sorted(classes) for node, classes in data.access_classes.items()}},
+                  file, separators=(",", ":"))
+    partial.replace(cache)
+    return data

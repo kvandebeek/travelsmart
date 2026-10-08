@@ -1,7 +1,8 @@
 # TravelSmart network design
 
-Status: design, 8 October 2026. Nothing here is built yet; the old commute routes, corridors and
-their data were removed on the same day to start fresh.
+Status: phase 1 builder, automated topology audit and local review map built, 8 October 2026. The
+old commute routes, corridors and their data were removed on the same day to start fresh. The audit
+has found missing links that must be fixed before the graph is used for measurements.
 
 ## 1. Goal
 
@@ -42,7 +43,8 @@ Rules:
   connection nodes; city rings (R40 Ghent, R23 Leuven, R70/R71 Hasselt, R30 Bruges, R8 Kortrijk, …)
   use regional-road nodes.
 - Nodes are generated from OpenStreetMap (motorway junctions, on-ramp merge points, road crossings),
-  then reviewed on a map before use.
+  then checked for disconnected components, isolated nodes and nearby unjoined road ends. The
+  remaining flagged cases are reviewed on a map before use.
 
 ### 3.2 Which roads form the backbone
 
@@ -90,15 +92,25 @@ its region.
 Edges that keep failing validation have badly placed nodes and are fixed in the network, not in
 the data.
 
-## 5. Size (estimates; phase 1 measures them exactly)
+## 5. Size (phase 1 graph from the 7 October 2026 OSM extract)
 
-| Part | Estimate |
+| Part | Current graph / estimate for later phases |
 |---|---|
-| Carriageway + connection nodes | ~1,200–1,600 |
-| Regional-road nodes (N1–N99) | ~2,000–3,500 |
-| Backbone + transfer edges (directed) | ~6,000–10,000 |
-| Endpoint clusters | ~1,500–3,000 |
-| Access + ramp edges | ~4,000–8,000 |
+| Carriageway + connection nodes | 1,152 + 2,616 |
+| Regional-road + length split nodes | 1,453 + 1,493 |
+| Backbone + transfer edges (directed) | 1,220 motorway + 8,879 regional + 341 transfer |
+| Ramp and shared-junction edges (directed) | 1,354 on + 1,541 off + 538 ramp links + 66 zero-distance junction turns |
+| Endpoint clusters (phase 2) | ~1,500–3,000 |
+| Access edges (phase 2) | Not built yet |
+
+The builder includes the shortest legal local road paths found within 15 km in both directions
+between motorway exits and the N1–N99/R1–R99 backbone. Exact OSM junctions remain separate so
+short roads between them retain their length and one-way restriction. The automated audit reports
+no missing links at numbered OSM junctions and no unrepresented OSM junctions. Of 2,172 public-road exit
+connections checked, 31 have no selected local road path to the numbered backbone; 11 cannot
+reach it in the exit direction and 6 cannot be reached from it in the entrance direction. The
+remaining 80 proximity candidates need a separate topology check: bridges and parallel
+carriageways can be close without joining.
 
 This is too much to measure everything every half hour, so measurement is **tiered** (§6).
 
@@ -206,7 +218,7 @@ of day, and is published alongside the results.
 | Phase | Delivers |
 |---|---|
 | 0 ✅ | Old routes, corridors and data removed; old cloud collection stopped |
-| 1 | Network builder: nodes and edges from OpenStreetMap, intended roads, expected lengths; a review map |
+| 1 (in review) | Network builder: nodes and edges from OpenStreetMap, intended roads, expected lengths; automated topology audit and review map |
 | 2 | Endpoints: open datasets per category, clustering, access edges |
 | 3 | Collectors: TomTom chains, HERE sample, Google edges with exact seconds and road validation; raw SQLite store; 24/7 scheduler for the Pi |
 | 4 | Profiles: cells, usual, provider calibration, publishing; stitched-vs-direct validation |
@@ -221,7 +233,7 @@ weeks of collection the later phases need. Collection should start as early as p
 - **Google exact seconds**: Google's directions response appears to contain durations in seconds
   next to the rounded labels; this needs a reliable parse. Without it, short Google edges are
   limited by whole-minute rounding.
-- **Provider terms: a real constraint, to decide before phase 3.**
+- **Provider terms: a real constraint, deferred by the owner on 8 October 2026** (design proceeds as described; revisit before relying on stored TomTom/HERE data publicly).
   - TomTom's developer terms (13.3) prohibit "the caching or storing of any Results", except
     short-term caching within the response's cache headers, and the free plan only permits
     "Evaluation Use" (internal evaluation and testing). Building weeks of stored profiles from

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TravelSmart network review</title>
+  <style>
+    html,body{margin:0;height:100%;font:14px system-ui,sans-serif;background:#e7edf0;color:#172936}
+    canvas{display:block;width:100%;height:100%;cursor:grab}canvas:active{cursor:grabbing}
+    aside{position:absolute;top:16px;left:16px;max-width:320px;padding:14px 16px;background:#fffffff0;
+      border-radius:10px;box-shadow:0 2px 14px #1234;line-height:1.5}
+    h1{font-size:18px;margin:0 0 5px}p{margin:4px 0 10px}label{display:block;cursor:pointer}
+    input{accent-color:#235b8e}button{margin-top:8px;padding:5px 9px}#detail{margin-top:10px;
+      max-height:180px;overflow:auto;overflow-wrap:anywhere}small{color:#4a6170}
+    #error{color:#a22323}
+  </style>
+</head>
+<body>
+  <canvas id="map" aria-label="Belgian road network review map"></canvas>
+  <aside>
+    <h1>Belgian road network</h1>
+    <p id="status">Loading local network data…</p>
+    <label><input type="checkbox" data-kind="motorway" checked> Motorway</label>
+    <label><input type="checkbox" data-kind="transfer" checked> Transfer</label>
+    <label><input type="checkbox" data-kind="ramp_on" checked> On ramps</label>
+    <label><input type="checkbox" data-kind="ramp_off" checked> Off ramps</label>
+    <label><input type="checkbox" data-kind="ramp_link" checked> Ramp links</label>
+    <label><input type="checkbox" data-kind="regional" checked> Regional</label>
+    <p><strong>Nodes</strong> (shown at every zoom level)</p>
+    <label><input type="checkbox" data-node="motorway" checked> <span style="color:#a51e1e">●</span> Motorway</label>
+    <label><input type="checkbox" data-node="connection" checked> <span style="color:#6241a7">●</span> Connection</label>
+    <label><input type="checkbox" data-node="regional" checked> <span style="color:#173b50">●</span> Regional</label>
+    <label><input type="checkbox" data-node="split" checked> <span style="color:#28a362">●</span> Split</label>
+    <p><strong>Automated checks</strong></p>
+    <label><input type="checkbox" id="show-issues" checked> Show flagged locations</label>
+    <p id="audit-status"><small>Loading topology audit…</small></p>
+    <button id="next-issue" type="button">Next flagged location</button>
+    <button id="reset" type="button">Fit Belgium</button>
+    <button id="nodes-only" type="button">Nodes only</button>
+    <button id="all-layers" type="button">All layers</button>
+    <p><small>Drag to pan · scroll to zoom · click a node or road to inspect it.</small></p>
+    <div id="detail"></div>
+    <p id="error"></p>
+    <small>Road data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>,
+      extract by <a href="https://download.geofabrik.de/europe/belgium.html">Geofabrik</a>.</small>
+  </aside>
+  <script>
+    const canvas=document.querySelector('#map'), ctx=canvas.getContext('2d');
+    const status=document.querySelector('#status'), detail=document.querySelector('#detail');
+    const colors={motorway:'#c74932',transfer:'#a44690',ramp_on:'#e9a13d',ramp_off:'#e9a13d',
+      ramp_link:'#e9a13d',junction:'#a44690',regional:'#287eac'};
+    let graph, entries=[], nodeEntries=[], issues=[], issueIndex=-1;
+    let scale=1, cx=4.5, cy=50.5, dragging=false, lastX=0,lastY=0, frame=0;
+    const x=lon=>lon*Math.cos(50.5*Math.PI/180), y=lat=>-lat;
+    const panelWidth=()=>innerWidth>700?document.querySelector('aside').offsetWidth+32:0;
+    const centerX=()=>innerWidth/2+panelWidth()/2;
+    const project=(lat,lon)=>[(x(lon)-x(cx))*scale+centerX(),(y(lat)-y(cy))*scale+canvas.clientHeight/2];
+    const scheduleDraw=()=>{if(!frame)frame=requestAnimationFrame(()=>{frame=0;draw()})};
+    function viewBounds(){const left=x(cx)-centerX()/scale,right=x(cx)+(innerWidth-centerX())/scale;
+      const top=y(cy)-innerHeight/(2*scale),bottom=y(cy)+innerHeight/(2*scale);
+      return [left,right,top,bottom]}
+    function overlaps(b,v){return b[1]>=v[0]&&b[0]<=v[1]&&b[3]>=v[2]&&b[2]<=v[3]}
+    function resize(){const dpr=window.devicePixelRatio||1;canvas.width=innerWidth*dpr;canvas.height=innerHeight*dpr;
+      ctx.setTransform(dpr,0,0,dpr,0,0);draw()}
+    function fit(){scale=Math.min((innerWidth-panelWidth())/(x(6.6)-x(2.4)),innerHeight/(51.6-49.4))*.88;
+      cx=4.5;cy=50.5;draw()}
+    function draw(){ctx.clearRect(0,0,innerWidth,innerHeight);if(!graph)return;
+      const view=viewBounds();
+      const enabled=new Set([...document.querySelectorAll('[data-kind]:checked')].map(el=>el.dataset.kind));
+      ctx.save();ctx.transform(scale,0,0,scale,centerX()-x(cx)*scale,innerHeight/2-y(cy)*scale);
+      for(const [id,e,bounds,path] of entries){if(!enabled.has(e.kind)||!overlaps(bounds,view))continue;
+        ctx.strokeStyle=colors[e.kind];ctx.lineWidth=(e.kind==='motorway'?2:1)/scale;
+        ctx.stroke(path)}
+      ctx.restore();
+      const nodeKinds=new Set([...document.querySelectorAll('[data-node]:checked')].map(el=>el.dataset.node));
+      for(const [id,n] of nodeEntries){if(!nodeKinds.has(n.kind)||
+        x(n.lon)<view[0]||x(n.lon)>view[1]||y(n.lat)<view[2]||y(n.lat)>view[3])continue;
+        const [px,py]=project(n.lat,n.lon);if(px<0||py<0||px>innerWidth||py>innerHeight)continue;
+        ctx.fillStyle={motorway:'#a51e1e',connection:'#6241a7',regional:'#173b50',split:'#28a362'}[n.kind];
+        const radius=scale>500?2.8:(n.kind==='connection'?2.5:1.6);
+        ctx.beginPath();ctx.arc(px,py,radius,0,Math.PI*2);ctx.fill()}
+      if(document.querySelector('#show-issues').checked){for(const issue of issues){
+        if(x(issue.lon)<view[0]||x(issue.lon)>view[1]||y(issue.lat)<view[2]||y(issue.lat)>view[3])continue;
+        const [px,py]=project(issue.lat,issue.lon);
+        ctx.strokeStyle=issue.category==='directional_backbone_gap'?'#8b2fc9':
+          issue.category==='no_backbone_path'?'#b00020':
+          issue.category==='source_junction_missing_link'?'#a000b0':
+          issue.category==='unrepresented_source_junction'?'#b00020':
+          issue.category==='local_connector_needed'?'#ba7600':
+          issue.category==='isolated_node'?'#b00020':'#ff5700';ctx.lineWidth=2;
+        ctx.beginPath();ctx.arc(px,py,scale>1000?8:5,0,Math.PI*2);ctx.stroke()}}
+    }
+    canvas.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId)});
+    canvas.addEventListener('pointermove',e=>{if(!dragging)return;
+      cx-=(e.clientX-lastX)/scale/Math.cos(50.5*Math.PI/180);cy+=(e.clientY-lastY)/scale;
+      lastX=e.clientX;lastY=e.clientY;scheduleDraw()});
+    canvas.addEventListener('pointerup',()=>dragging=false);
+    canvas.addEventListener('wheel',e=>{e.preventDefault();const before=project(cy,cx),oldScale=scale;
+      scale=Math.max(60,Math.min(20000,scale*(e.deltaY<0?1.3:1/1.3)));
+      const shift=1/oldScale-1/scale;
+      cx+=(e.clientX-before[0])*shift/Math.cos(50.5*Math.PI/180);
+      cy-=(e.clientY-before[1])*shift;scheduleDraw()},{passive:false});
+    canvas.addEventListener('click',e=>{if(!graph)return;
+      if(document.querySelector('#show-issues').checked){let hit=null,best=10;
+        for(const issue of issues){const [px,py]=project(issue.lat,issue.lon);
+          const d=Math.hypot(px-e.clientX,py-e.clientY);if(d<best){best=d;hit=issue}}
+        if(hit){showIssue(hit);return}}
+      let nodeHit=null,nodeDistance=8;
+      for(const [id,node] of nodeEntries){const [px,py]=project(node.lat,node.lon);
+        const d=Math.hypot(px-e.clientX,py-e.clientY);if(d<nodeDistance){nodeDistance=d;nodeHit=[id,node]}}
+      if(nodeHit){const [id,node]=nodeHit;detail.textContent=
+        `${id} · ${node.kind} node · ${node.roads.join(', ')||'unnamed'} · ${node.name||''} · ${node.lat}, ${node.lon}`;return}
+      let nearest=null,best=12;
+      const view=viewBounds();
+      for(const [id,edge,bounds] of entries){if(!overlaps(bounds,view))continue;
+        for(const [lat,lon] of edge.path){const [px,py]=project(lat,lon);
+        const d=Math.hypot(px-e.clientX,py-e.clientY);if(d<best){best=d;nearest=[id,edge]}}}
+      if(!nearest)return;const [id,edge]=nearest;
+      detail.textContent=`${id} · ${edge.kind} · ${edge.roads.join(', ')||'unnamed'} · ${edge.metres} m · ${edge.from} → ${edge.to}`});
+    document.querySelectorAll('input').forEach(el=>el.addEventListener('change',draw));
+    document.querySelector('#reset').addEventListener('click',fit);addEventListener('resize',resize);resize();fit();
+    document.querySelector('#nodes-only').addEventListener('click',()=>{
+      document.querySelectorAll('[data-kind]').forEach(el=>el.checked=false);
+      document.querySelectorAll('[data-node]').forEach(el=>el.checked=true);draw()});
+    document.querySelector('#all-layers').addEventListener('click',()=>{
+      document.querySelectorAll('[data-kind],[data-node]').forEach(el=>el.checked=true);draw()});
+    function showIssue(issue){const target=issue.nearest;
+      const lead=`${issue.category.replaceAll('_',' ')} at ${issue.node} (${issue.roads.join(', ')||'unnamed'}). `;
+      if(issue.category==='source_junction_missing_link'){
+        detail.textContent=lead+`OSM joins the ramp or motorway to ${issue.source_backbone_roads.join(', ')} at this point, but the graph has no direct link.`;return}
+      if(issue.category==='unrepresented_source_junction'){
+        detail.textContent=lead+'OSM has a shared road junction here, but no graph node represents it or a nearby joined connection.';return}
+      if(issue.category==='local_connector_needed'){
+        detail.textContent=lead+'OSM joins the ramp to a local road here; this local connector is outside the current backbone.';return}
+      if(issue.category==='no_backbone_path'){
+        detail.textContent=lead+'No selected local-road path connects this exit to the numbered backbone.';return}
+      if(issue.category==='directional_backbone_gap'){
+        const directions=issue.missing_directions.map(value=>value==='exit_to_backbone'?'from exit to backbone':'from backbone to entrance');
+        detail.textContent=lead+`The selected roads do not allow travel ${directions.join(' or ')}.`;return}
+      detail.textContent=lead+`${issue.component_nodes} node(s) in its connected component. `+
+        (target?`Nearby road with no direct graph link here: ${target.roads.join(', ')||target.edge}, ${target.metres} m away.`:'No nearby road within 250 m.')}
+    document.querySelector('#next-issue').addEventListener('click',()=>{if(!issues.length)return;
+      issueIndex=(issueIndex+1)%issues.length;const issue=issues[issueIndex];
+      cx=issue.lon;cy=issue.lat;scale=12000;showIssue(issue);draw()});
+    fetch('../data/network/network.json').then(r=>{if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()})
+      .then(data=>{graph=data;entries=Object.entries(data.edges).map(([id,e])=>{
+          const path=new Path2D();let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+          e.path.forEach(([lat,lon],index)=>{const px=x(lon),py=y(lat);
+            if(index)path.lineTo(px,py);else path.moveTo(px,py);
+            minX=Math.min(minX,px);maxX=Math.max(maxX,px);minY=Math.min(minY,py);maxY=Math.max(maxY,py)});
+          return [id,e,[minX,maxX,minY,maxY],path]});
+        const rank={split:0,regional:1,motorway:2,connection:3};
+        nodeEntries=Object.entries(data.nodes).sort((a,b)=>rank[a[1].kind]-rank[b[1].kind]);status.textContent=
+        `${Object.keys(data.nodes).length.toLocaleString()} nodes · ${entries.length.toLocaleString()} directed edges`;
+        draw()}).catch(err=>document.querySelector('#error').textContent=
+        `Could not load data/network/network.json (${err.message}). Run the build script and serve the repository with python -m http.server 8000.`);
+    fetch('../data/network/audit.json').then(r=>{if(!r.ok)throw Error(`HTTP ${r.status}`);return r.json()})
+      .then(data=>{issues=data.issues;const s=data.summary;
+        document.querySelector('#audit-status').textContent=
+          `${s.source_junctions_missing_link} numbered junction links missing; `+
+          `${s.exit_connections_without_backbone_path} exits without a local backbone path; `+
+          `${s.exit_to_backbone_direction_gaps+s.backbone_to_entry_direction_gaps} direction gaps; `+
+          `${s.possible_gaps} proximity candidates.`;
+        draw()}).catch(err=>document.querySelector('#audit-status').textContent=
+        `Audit unavailable (${err.message}); run python scripts/audit_network.py.`);
+  </script>
+</body>
+</html>

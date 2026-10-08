@@ -15,6 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 google-maps-capture = ["playwright>=1.50"]
+network = ["osmium>=4.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

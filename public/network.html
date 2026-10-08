@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TravelSmart — the network over the week</title>
+<style>
+  :root {
+    --bg: #11141a; --panel: #181c24; --line: #262c38; --text: #e7ecf3; --muted: #93a0b4;
+    --accent: #5aa9e6; --unmeasured: #39404e;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7f9; --panel: #fff; --line: #dfe3ea; --text: #1a1f29; --muted: #5d6a7e;
+            --unmeasured: #d3d8e0; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  header { padding: 20px 24px 6px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.lede { margin: 0; color: var(--muted); }
+  main { padding: 12px 24px 32px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  svg { width: 100%; height: auto; display: block; background: transparent; }
+  .controls { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 12px; }
+  label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  input[type=range] { width: 260px; }
+  select, button { background: var(--bg); color: var(--text); border: 1px solid var(--line);
+                   border-radius: 6px; padding: 6px 10px; font: inherit; }
+  button.play { background: var(--accent); color: #06121c; border: 0; font-weight: 600; cursor: pointer; }
+  .when { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 128px; }
+  .legend { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .swatch { width: 16px; height: 12px; border-radius: 2px; }
+  .status { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>The network over a typical week</h1>
+  <p class="lede">Each stretch coloured by how it compares with its own usual time.</p>
+</header>
+<main>
+  <div class="panel">
+    <div class="controls">
+      <label>Day
+        <select id="day"></select>
+      </label>
+      <label>Time
+        <input type="range" id="time" min="0" max="47" value="16">
+      </label>
+      <span class="when" id="when">Monday 08:00</span>
+      <button class="play" id="play">Play</button>
+    </div>
+    <svg id="map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-label="Network map"></svg>
+    <div class="legend">
+      <span class="swatch" style="background:#3fb27f"></span><span>quicker than usual</span>
+      <span class="swatch" style="background:#d9c35a"></span><span>about usual</span>
+      <span class="swatch" style="background:#d4574e"></span><span>slower</span>
+      <span class="swatch" style="background:var(--unmeasured)"></span><span>not measured yet</span>
+    </div>
+    <p class="status" id="status">Loading…</p>
+  </div>
+</main>
+<script>
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const HALF_HOURS = 48, WEEKDAYS = 7;
+let graph = null, profiles = {}, aspect = 1, bounds = null, timer = null;
+
+const el = (id) => document.getElementById(id);
+
+async function load() {
+  const [g, p] = await Promise.all([
+    fetch("data/graph.json").then(r => r.json()),
+    fetch("data/profiles.json").then(r => r.json()).catch(() => ({})),
+  ]);
+  graph = g;
+  profiles = p || {};
+  DAYS.forEach((day, index) => {
+    const option = document.createElement("option");
+    option.value = index; option.textContent = day;
+    el("day").appendChild(option);
+  });
+  buildMap();
+  draw();
+}
+
+function project([lat, lon]) {
+  return [(lon - bounds.west) / (bounds.east - bounds.west) * 100,
+          (bounds.north - lat) / (bounds.north - bounds.south) * 100];
+}
+
+function buildMap() {
+  const lats = graph.nodes.map(n => n[0]), lons = graph.nodes.map(n => n[1]);
+  bounds = { south: Math.min(...lats), north: Math.max(...lats),
+             west: Math.min(...lons), east: Math.max(...lons) };
+  aspect = (bounds.north - bounds.south) * 111 / ((bounds.east - bounds.west) * 70);
+  const map = el("map");
+  map.setAttribute("viewBox", `0 0 100 ${(100 * aspect).toFixed(1)}`);
+  // A stretch is drawn as the straight line between its two ends. The real road bends, but at this
+  // scale the shape of the country still comes out, and carrying every point would be 18 MB.
+  const lines = graph.edges.map((edge, index) => {
+    const [x1, y1] = project(graph.nodes[edge[0]]);
+    const [x2, y2] = project(graph.nodes[edge[1]]);
+    return `<line id="e${index}" x1="${x1.toFixed(2)}" y1="${(y1 * aspect).toFixed(2)}" ` +
+           `x2="${x2.toFixed(2)}" y2="${(y2 * aspect).toFixed(2)}" stroke-width="0.18" ` +
+           `stroke="var(--unmeasured)" stroke-linecap="round"/>`;
+  }).join("");
+  map.innerHTML = lines;
+}
+
+function cellValue(profile, weekday, half) {
+  const exact = profile.cells[`${weekday}:${half}`];
+  if (exact !== undefined) return exact;
+  for (let other = 0; other < WEEKDAYS; other++) {
+    const value = profile.cells[`${other}:${half}`];
+    if (value !== undefined) return value;
+  }
+  return null;
+}
+
+function draw() {
+  const weekday = Number(el("day").value || 0), half = Number(el("time").value);
+  let lit = 0;
+  el("when").textContent = `${DAYS[weekday]} ${String(Math.floor(half / 2)).padStart(2, "0")}:${half % 2 ? "30" : "00"}`;
+  graph.edges.forEach((_edge, index) => {
+    const line = el(`e${index}`);
+    if (!line) return;
+    const profile = profiles[graph.edgeIds[index]];
+    let stroke = "var(--unmeasured)", width = 0.18;
+    if (profile && profile.usual) {
+      const seconds = cellValue(profile, weekday, half);
+      if (seconds !== null) {
+        const ratio = seconds / profile.usual - 1;
+        stroke = colour(ratio);
+        width = 0.34;
+      }
+    }
+    line.setAttribute("stroke", stroke);
+    line.setAttribute("stroke-width", width);
+    if (stroke !== "var(--unmeasured)") lit++;
+  });
+  const measured = Object.keys(profiles).length;
+  el("status").textContent = measured
+    ? `${lit.toLocaleString()} stretches have been measured at this half hour, out of ` +
+      `${measured.toLocaleString()} measured at some point and ` +
+      `${graph.edges.length.toLocaleString()} in the network. Grey means nothing is known for this ` +
+      `moment, not that the road is quiet.`
+    : "Nothing has been measured yet, so every stretch is grey.";
+}
+
+// -20% or quicker is green, usual is yellow, +40% or worse is red.
+function colour(ratio) {
+  const share = Math.max(0, Math.min(1, (ratio + 0.2) / 0.6));
+  return `hsl(${145 - share * 145} 58% 48%)`;
+}
+
+el("day").onchange = draw;
+el("time").oninput = draw;
+el("play").onclick = () => {
+  if (timer) {
+    clearInterval(timer); timer = null; el("play").textContent = "Play";
+    return;
+  }
+  el("play").textContent = "Pause";
+  timer = setInterval(() => {
+    const next = (Number(el("time").value) + 1) % HALF_HOURS;
+    el("time").value = next;
+    draw();
+  }, 350);
+};
+
+load().catch(error => { el("status").textContent = `Could not load the network: ${error}`; });
+</script>
+</body>
+</html>

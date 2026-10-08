@@ -7,7 +7,7 @@ rem Do not start this file twice: two copies of the same corridor would share a 
 rem Ctrl+C here only stops the waiting; close a corridor's window to stop that corridor.
 
 cd /d "%~dp0"
-set "ROUNDS=63"
+set "ROUNDS=1"
 set "CORRIDORS=e314 e17_west west_flanders wallonia_e42 e411_n4 e19_e420 ardennes_e25 central_east"
 set "STATUS=data\logs\stretch_status"
 set "PYTHON=.venv\Scripts\python.exe"

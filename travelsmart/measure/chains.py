@@ -24,18 +24,34 @@ MAX_BRIDGE_LEGS = 12
 # Zero-distance turns at a shared junction have nothing to measure, and an access edge belongs to an
 # endpoint cluster rather than the backbone; §6.4 measures those on their own rhythm.
 MEASURED_KINDS = frozenset({"motorway", "regional", "transfer", "ramp_on", "ramp_off", "ramp_link"})
+# Below this, an edge cannot be measured reliably by anyone. Measured on 9 October 2026: edges under
+# 200 m failed §4's length check 77% of the time with TomTom, 80% with HERE and 43% with Google, and
+# the failures are not near misses but legs several times the expected length. Two waypoints that
+# close together snap ambiguously, or the provider has to drive on and come back to reach the second
+# one legally. Chaining does not help: it is worse than Google's single search. These stretches are
+# a node-placement question for the builder (§4), and until then they only waste the request budget,
+# so nothing targets them. A route crosses them on free flow, which for 150 m changes little.
+MIN_MEASURABLE_METRES = 200
+
+
+def measurable(edge: dict, kinds: frozenset[str] = MEASURED_KINDS,
+               min_metres: float = MIN_MEASURABLE_METRES) -> bool:
+    """Whether this edge is worth asking a provider about at all."""
+    return edge["kind"] in kinds and edge["metres"] >= min_metres
 
 
 def build_chains(edges: dict[str, dict], max_legs: int = MAX_LEGS,
                  kinds: frozenset[str] = MEASURED_KINDS,
-                 max_bridge: int = MAX_BRIDGE_LEGS) -> list[dict]:
+                 max_bridge: int = MAX_BRIDGE_LEGS,
+                 min_metres: float = MIN_MEASURABLE_METRES) -> list[dict]:
     """Group the measured edges into chains of at most max_legs consecutive legs.
 
     Returns one dict per chain with its node path, its edge ids in order, and the total distance.
     """
     if max_legs < 1:
         raise ValueError("a chain needs at least one leg")
-    measured = {edge_id: edge for edge_id, edge in edges.items() if edge["kind"] in kinds}
+    measured = {edge_id: edge for edge_id, edge in edges.items()
+                if measurable(edge, kinds, min_metres)}
     out_edges: dict[str, list[str]] = defaultdict(list)
     in_edges: dict[str, list[str]] = defaultdict(list)
     for edge_id, edge in measured.items():

@@ -43,7 +43,7 @@ def test_a_chain_stops_at_the_leg_limit():
 def test_a_chain_bridges_over_covered_edges_to_keep_going():
     # Two long stretches joined by a short one. Measuring them as one chain costs one request
     # instead of two, so the chain crosses the middle edge even once it is already covered.
-    edges = {"first": edge("n1", "n2", metres=5000), "middle": edge("n2", "n3", metres=200),
+    edges = {"first": edge("n1", "n2", metres=5000), "middle": edge("n2", "n3", metres=250),
              "second": edge("n3", "n4", metres=5000)}
     chains = build_chains(edges)
     assert len(chains) == 1
@@ -53,7 +53,7 @@ def test_a_chain_bridges_over_covered_edges_to_keep_going():
 def test_a_chain_does_not_wander_endlessly_over_covered_edges():
     # One uncovered edge sits far behind a long covered tail; the chain must give up rather than
     # drive the whole tail measuring nothing new.
-    edges = {f"tail{i}": edge(f"t{i}", f"t{i + 1}", metres=100) for i in range(20)}
+    edges = {f"tail{i}": edge(f"t{i}", f"t{i + 1}", metres=300) for i in range(20)}
     edges["seed"] = edge("t20", "t21", metres=9000)
     chains = build_chains(edges)
     for chain in chains:
@@ -143,3 +143,15 @@ def test_google_distances_are_read_in_km_and_in_metres():
     assert distance_km_in("24 min") is None          # "min" must not read as metres
     assert distance_km_in("5 min 650 m") == 0.65
     assert distance_km_in(None) is None
+
+
+def test_an_edge_too_short_to_measure_is_not_targeted():
+    # Under 200 m every provider returns a leg several times the expected length, so these only
+    # waste the request budget; they are a node-placement question for the builder instead.
+    from travelsmart.measure.chains import measurable
+    assert measurable(edge("n1", "n2", metres=1000))
+    assert not measurable(edge("n1", "n2", metres=150))
+    assert not measurable(edge("n1", "n2", kind="access", metres=1000))
+    chains = build_chains({"short": edge("n1", "n2", metres=150),
+                           "long": edge("n2", "n3", metres=1500)})
+    assert [c["edges"] for c in chains] == [["long"]]

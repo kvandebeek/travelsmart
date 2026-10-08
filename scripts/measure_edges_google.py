@@ -25,11 +25,9 @@ from playwright.sync_api import Error as PlaywrightError, sync_playwright
 
 from scripts.collect_google_maps import LOCAL_TIMEZONE, Point, capture, fresh_page
 from travelsmart.db import LegMeasurement, make_session_factory
+from travelsmart.measure.chains import measurable
 from travelsmart.measure.collect import half_hour_of
 from travelsmart.measure.validation import accepts
-
-MEASURED_KINDS = {"motorway", "regional", "transfer", "ramp_on", "ramp_off", "ramp_link"}
-
 
 def edge_points(edge_id: str, edge: dict) -> tuple[Point, Point]:
     """The edge's own ends, as the origin and destination of one directions search."""
@@ -77,12 +75,11 @@ def main() -> int:
     args = parser.parse_args()
 
     network = json.loads(args.network.read_text(encoding="utf-8"))
-    measurable = [(edge_id, edge) for edge_id, edge in network["edges"].items()
-                  if edge["kind"] in MEASURED_KINDS and edge["metres"] > 0]
+    targets = [(edge_id, edge) for edge_id, edge in network["edges"].items() if measurable(edge)]
     # A stable shuffle, then one slice per runner: every runner measures different edges, and a
     # restart with the same seed picks up the same ordering rather than re-measuring the first few.
-    random.Random(args.seed).shuffle(measurable)
-    mine = measurable[args.runner::args.runners][:args.limit]
+    random.Random(args.seed).shuffle(targets)
+    mine = targets[args.runner::args.runners][:args.limit]
     if not mine:
         print("no edges to measure", file=sys.stderr)
         return 0

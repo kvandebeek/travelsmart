@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from travelsmart.db import LegMeasurement, make_session_factory
 from travelsmart.measure.budget import BUDGETS, remaining_today
-from travelsmart.measure.chains import MEASURED_KINDS
+from travelsmart.measure.chains import measurable
 
 
 def main() -> None:
@@ -25,8 +25,7 @@ def main() -> None:
     args = parser.parse_args()
 
     network = json.loads(args.network.read_text(encoding="utf-8"))
-    measurable = {edge_id for edge_id, edge in network["edges"].items()
-                  if edge["kind"] in MEASURED_KINDS and edge["metres"] > 0}
+    targets = {edge_id for edge_id, edge in network["edges"].items() if measurable(edge)}
     since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
 
     sessions = make_session_factory()
@@ -51,9 +50,9 @@ def main() -> None:
         print(f"{provider:<9}{len(group):>9,}{accepted:>10,}{len(group) - accepted:>10,}"
               f"{edges:>9,}{f'{left}/{allowance}':>14}")
 
-    covered = {row.edge_id for row in rows if row.accepted} & measurable
-    print(f"\ncoverage: {len(covered):,} of {len(measurable):,} measurable edges "
-          f"({len(covered) / len(measurable):.1%}) have at least one accepted measurement")
+    covered = {row.edge_id for row in rows if row.accepted} & targets
+    print(f"\ncoverage: {len(covered):,} of {len(targets):,} measurable edges "
+          f"({len(covered) / len(targets):.1%}) have at least one accepted measurement")
 
     rejected = [row for row in rows if not row.accepted]
     if rejected:

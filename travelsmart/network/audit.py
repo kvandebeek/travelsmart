@@ -43,14 +43,15 @@ def _reachable(starts: set[str], adjacency: dict[str, set[str]]) -> set[str]:
 
 
 def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
-                  source_points: dict | None = None) -> dict:
+                  source_points: dict | None = None, update=None) -> dict:
     """Report isolated nodes, small components and dead ends close to an unjoined road."""
     neighbours = {node_id: set() for node_id in nodes}
     incident_kinds = defaultdict(set)
     incoming_kinds, outgoing_kinds = defaultdict(set), defaultdict(set)
     regional_out, regional_in, regional_neighbours = defaultdict(set), defaultdict(set), defaultdict(set)
     backbone_anchors = set()
-    for edge in edges.values():
+    edge_values = list(edges.values())
+    for index, edge in enumerate(edge_values, 1):
         neighbours[edge["from"]].add(edge["to"])
         neighbours[edge["to"]].add(edge["from"])
         incident_kinds[edge["from"]].add(edge["kind"])
@@ -65,10 +66,13 @@ def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
             regional_neighbours[end].add(start)
             if any(BACKBONE_REF.fullmatch(road) for road in edge["roads"]):
                 backbone_anchors.update((start, end))
+        if update and (index == len(edge_values) or index % 500 == 0):
+            update(0.15 * index / len(edge_values), f"auditing graph links ({index:,}/{len(edge_values):,})")
 
     components = []
     component_of = {}
-    for node_id in nodes:
+    node_ids = list(nodes)
+    for index, node_id in enumerate(node_ids, 1):
         if node_id in component_of:
             continue
         stack = [node_id]
@@ -82,22 +86,29 @@ def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
         index = len(components)
         components.append(component)
         component_of.update({node: index for node in component})
+        if update and (index == len(node_ids) or index % 500 == 0):
+            update(0.15 + 0.15 * index / len(node_ids),
+                   f"auditing connected components ({index:,}/{len(node_ids):,})")
     components.sort(key=len, reverse=True)
     component_of = {node: index for index, members in enumerate(components) for node in members}
 
     # Index road segments in 250 m cells. Query only cells touching a dangling node's 100 m radius.
     segments = []
     cells = defaultdict(list)
-    for edge_id, edge in edges.items():
+    edge_items = list(edges.items())
+    for edge_index, (edge_id, edge) in enumerate(edge_items, 1):
         path = [_xy(*point) for point in edge["path"]]
         for a, b in zip(path, path[1:]):
-            index = len(segments)
+            segment_index = len(segments)
             segments.append((edge_id, a, b))
             left, right = sorted((int(a[0] // CELL_METRES), int(b[0] // CELL_METRES)))
             bottom, top = sorted((int(a[1] // CELL_METRES), int(b[1] // CELL_METRES)))
             for col in range(left, right + 1):
                 for row in range(bottom, top + 1):
-                    cells[col, row].append(index)
+                    cells[col, row].append(segment_index)
+        if update and (edge_index == len(edge_items) or edge_index % 500 == 0):
+            update(0.30 + 0.20 * edge_index / len(edge_items),
+                   f"indexing road segments for audit ({edge_index:,}/{len(edge_items):,})")
 
     issues = []
     undirected_backbone = _reachable(backbone_anchors, regional_neighbours)
@@ -107,7 +118,10 @@ def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
     exit_connections_without_backbone_path = 0
     exit_to_backbone_direction_gaps = 0
     backbone_to_entry_direction_gaps = 0
-    for node_id, node in nodes.items():
+    for index, (node_id, node) in enumerate(nodes.items(), 1):
+        if update and (index == len(nodes) or index % 500 == 0):
+            update(0.50 + 0.10 * index / len(nodes),
+                   f"checking exit connectivity ({index:,}/{len(nodes):,})")
         if node["kind"] != "connection":
             continue
         needs_exit = "ramp_off" in incoming_kinds[node_id]
@@ -141,7 +155,10 @@ def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
             "component_nodes": len(components[component_of[node_id]]),
             "missing_directions": missing, "nearest": None,
         })
-    for node_id, node in nodes.items():
+    for index, (node_id, node) in enumerate(nodes.items(), 1):
+        if update and (index == len(nodes) or index % 500 == 0):
+            update(0.60 + 0.15 * index / len(nodes),
+                   f"checking road-end gaps ({index:,}/{len(nodes):,})")
         degree = len(neighbours[node_id])
         if degree > 1:
             continue
@@ -200,7 +217,8 @@ def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
     if source_ways is not None:
         motorway_source, regional_source = set(), set()
         backbone_refs = defaultdict(set)
-        for way in source_ways.values():
+        source_way_values = list(source_ways.values())
+        for index, way in enumerate(source_way_values, 1):
             is_motorway = way["tags"].get("highway") in ("motorway", "motorway_link")
             target = motorway_source if is_motorway else regional_source
             target.update(way["nodes"])
@@ -209,11 +227,17 @@ def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
                         if BACKBONE_REF.match(ref.strip())}
                 for osm in way["nodes"]:
                     backbone_refs[osm].update(refs)
+            if update and (index == len(source_way_values) or index % 500 == 0):
+                update(0.75 + 0.10 * index / len(source_way_values),
+                       f"checking source-road coverage ({index:,}/{len(source_way_values):,})")
         source_shared = motorway_source & regional_source
         represented_by = defaultdict(set)
-        for node_id, node in nodes.items():
+        for index, (node_id, node) in enumerate(nodes.items(), 1):
             for osm in node.get("osm_nodes", ()):
                 represented_by[osm].add(node_id)
+            if update and (index == len(nodes) or index % 500 == 0):
+                update(0.85 + 0.10 * index / len(nodes),
+                       f"matching source junctions ({index:,}/{len(nodes):,})")
         represented = set(represented_by)
         unrepresented = len(source_shared - represented)
         joined_points = [_xy(node["lat"], node["lon"]) for node_id, node in nodes.items()
@@ -266,6 +290,8 @@ def audit_network(nodes: dict, edges: dict, source_ways: dict | None = None,
                                   not (item["nearest"] or {}).get("other_component", False),
                                   not (item["nearest"] or {}).get("same_road", False),
                                   (item["nearest"] or {}).get("metres", math.inf)))
+    if update:
+        update(1.0, "audit complete")
     return {
         "summary": {
             "nodes": len(nodes), "edges": len(edges),

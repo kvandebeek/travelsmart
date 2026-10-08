@@ -14,7 +14,7 @@ from travelsmart.network.osm import EXTRACT
 
 
 def write_audit(network_path: Path, source_ways: dict | None = None,
-                source_points: dict | None = None) -> Path:
+                source_points: dict | None = None, update=None, log=print) -> Path:
     network = json.loads(network_path.read_text(encoding="utf-8"))
     if source_ways is None:
         source_cache = EXTRACT.with_suffix(".roads.json")
@@ -24,13 +24,13 @@ def write_audit(network_path: Path, source_ways: dict | None = None,
             source_ways = {way_id: way for way_id, way in source["ways"].items()
                            if way_id in selected}
             source_points = source["points"]
-    result = audit_network(network["nodes"], network["edges"], source_ways, source_points)
+    result = audit_network(network["nodes"], network["edges"], source_ways, source_points, update=update)
     output = network_path.with_name("audit.json")
     partial = output.with_suffix(".partial")
     partial.write_text(json.dumps(result, separators=(",", ":")), encoding="utf-8")
     partial.replace(output)
-    print(f"Saved {len(result['issues'])} flagged locations to {output}")
-    print(result["summary"])
+    log(f"Saved {len(result['issues'])} flagged locations to {output}")
+    log(str(result["summary"]))
     return output
 
 

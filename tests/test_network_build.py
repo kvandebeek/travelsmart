@@ -2,7 +2,9 @@
 
 from travelsmart.network.build import MAX_EDGE_METRES, Network, _add_split, build_network, metres
 from travelsmart.network.connectors import select_network_ways
-from travelsmart.network.osm import EXIT_ACCESS_HOPS, OsmData, connector_candidate, exit_access_candidate, wanted
+from travelsmart.network.osm import (EXIT_ACCESS_HOPS, OsmData, _add_paired_backbone_carriageways,
+                                     connector_candidate, exit_access_candidate,
+                                     paired_carriageway_candidate, wanted)
 
 LAT, LON = 51.0, 5.0
 KM_LON = 1 / 70.0      # ~1 km east at this latitude
@@ -189,6 +191,14 @@ def test_connector_selection_keeps_separate_one_way_arrival_and_departure():
     assert set(selected.ways) == {1, 2, 3, 4, 5, 6}
 
 
+def test_pairing_candidate_is_flagged_even_when_also_a_connector_candidate():
+    # A bare "primary" carriageway with no ref already satisfies connector_candidate(), which once
+    # made load_belgium's elif skip the pairing check for it entirely (it never reached the N70 fix).
+    tags = {"highway": "primary", "name": "Grote Baan", "oneway": "yes"}
+    assert connector_candidate(tags)
+    assert paired_carriageway_candidate(tags)
+
+
 def test_connector_candidates_exclude_private_roads():
     assert connector_candidate({"highway": "tertiary", "access": "yes"})
     assert connector_candidate({"highway": "secondary", "ref": "N200"})
@@ -202,3 +212,64 @@ def test_exit_access_candidates_are_limited_to_public_small_roads():
     assert exit_access_candidate({"highway": "residential", "access": "destination"})
     assert not exit_access_candidate({"highway": "service"})
     assert not exit_access_candidate({"highway": "residential", "access": "private"})
+
+
+def test_unnumbered_one_way_carriageway_is_kept_when_it_shares_a_named_backbone_end():
+    data = layout([(1, [1, 2], {"highway": "primary", "ref": "N70", "name": "Grote Baan", "oneway": "yes"})],
+                  {1: (0, 0), 2: (1, 0)})
+    paired = {2: {"nodes": [3, 1], "tags": {"highway": "primary", "name": "Grote Baan", "oneway": "yes"}}}
+    assert _add_paired_backbone_carriageways(data, paired) == 1
+    assert set(data.ways) == {1, 2}
+
+
+def test_connector_selection_keeps_paired_carriageways_off_any_connector_path():
+    # A paired unnumbered carriageway far from any motorway exit must survive connector selection:
+    # it is backbone by virtue of pairing, not because a shortest path from an exit happens to use it.
+    data = layout([(1, [1, 2], {"highway": "primary", "ref": "N70", "name": "Grote Baan", "oneway": "yes"})],
+                  {1: (0, 0), 2: (1, 0), 3: (-1, 0)})
+    paired = {2: {"nodes": [3, 1], "tags": {"highway": "primary", "name": "Grote Baan", "oneway": "yes"}}}
+    assert _add_paired_backbone_carriageways(data, paired) == 1
+    selected = select_network_ways(data, progress=lambda _: None)
+    assert set(selected.ways) == {1, 2}
+
+
+def test_unnumbered_carriageway_chain_is_kept_across_several_segments():
+    # The unnumbered side of a divided road is often split into multiple OSM ways (e.g. around a
+    # roundabout). Only the first shares an endpoint with the numbered road; the rest must still be
+    # pulled in by following the chain, or the carriageway ends in a dangling, unreachable stub.
+    data = layout([(1, [1, 2], {"highway": "primary", "ref": "N70", "name": "Grote Baan", "oneway": "yes"})],
+                  {1: (0, 0), 2: (1, 0), 3: (2, 0), 4: (3, 0)})
+    chain = {
+        2: {"nodes": [3, 1], "tags": {"highway": "primary", "name": "Grote Baan", "oneway": "yes"}},
+        3: {"nodes": [4, 3], "tags": {"highway": "primary", "name": "Grote Baan", "oneway": "yes"}},
+    }
+    assert _add_paired_backbone_carriageways(data, chain) == 2
+    assert set(data.ways) == {1, 2, 3}
+    assert data.paired_carriageways == {2, 3}
+
+
+def test_unnumbered_carriageway_chain_bridges_an_unnamed_roundabout_arc():
+    # The two named segments of the unnumbered carriageway are interrupted by a roundabout arc that
+    # OSM tags with no name at all. The chain must bridge across it to pick up the far segment.
+    data = layout(
+        [(1, [1, 2], {"highway": "primary", "ref": "N70", "name": "Grote Baan", "oneway": "yes"}),
+         (9, [20, 21], {"highway": "primary", "junction": "roundabout", "oneway": "yes"})],
+        {1: (0, 0), 2: (1, 0), 3: (2, 0), 20: (3, 0), 21: (4, 0)})
+    chain = {
+        2: {"nodes": [2, 20], "tags": {"highway": "primary", "name": "Grote Baan", "oneway": "yes"}},
+        3: {"nodes": [21, 3], "tags": {"highway": "primary", "name": "Grote Baan", "oneway": "yes"}},
+    }
+    assert _add_paired_backbone_carriageways(data, chain) == 2
+    assert set(data.ways) == {1, 2, 3, 9}
+    assert data.paired_carriageways == {2, 3}
+
+
+def test_unnumbered_carriageway_does_not_join_only_by_road_class_or_different_name():
+    data = layout([(1, [1, 2], {"highway": "primary", "ref": "N70", "name": "Grote Baan", "oneway": "yes"})],
+                  {1: (0, 0), 2: (1, 0)})
+    candidates = {
+        2: {"nodes": [3, 1], "tags": {"highway": "primary", "name": "Other Road", "oneway": "yes"}},
+        3: {"nodes": [4, 1], "tags": {"highway": "secondary", "name": "Grote Baan", "oneway": "yes"}},
+    }
+    assert _add_paired_backbone_carriageways(data, candidates) == 0
+    assert set(data.ways) == {1}

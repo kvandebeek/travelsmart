@@ -172,12 +172,13 @@ def _ordered_numbers(ways: list[int], data: OsmData) -> list[str]:
     return numbers
 
 
-def build_network(data: OsmData) -> Network:
+def build_network(data: OsmData, update=None) -> Network:
     points = data.points
     motorway, regional = Graph(), Graph()
     regional_refs: dict[int, set] = defaultdict(set)
     motorway_ways = set()
-    for way_id, way in data.ways.items():
+    way_count = len(data.ways)
+    for index, (way_id, way) in enumerate(data.ways.items(), 1):
         tags, nodes = way["tags"], way["nodes"]
         highway = tags.get("highway", "")
         if highway in ("motorway", "motorway_link"):
@@ -189,6 +190,8 @@ def build_network(data: OsmData) -> Network:
             label = frozenset(r for r in road_numbers(tags) if REGIONAL_REF.match(r)) or frozenset({"roundabout"})
             for node in nodes:
                 regional_refs[node].add(label)
+        if update and (index == way_count or index % 500 == 0):
+            update(0.20 * index / way_count, f"indexing road graph ({index:,}/{way_count:,})")
 
     # --- motorways ------------------------------------------------------------------------------
     on_motorway = {node for way in motorway_ways for node in data.ways[way]["nodes"]}
@@ -209,7 +212,8 @@ def build_network(data: OsmData) -> Network:
     # --- connection nodes: slip-road ends near each other form one exit -----------------------------
     groups = UnionFind()
     grid = Grid()
-    for node in entries | exits:
+    connection_ends = list(entries | exits)
+    for index, node in enumerate(connection_ends, 1):
         groups.find(("c", node))
         # A slip end at a real OSM junction already connects to a regional road. Keep each such
         # junction distinct: clustering two ends can erase the local road between them.
@@ -218,26 +222,43 @@ def build_network(data: OsmData) -> Network:
         for other, _ in grid.near(points[node], CONNECTION_CLUSTER_METRES):
             groups.union(("c", node), ("c", other))
         grid.add(node, points[node])
+        if update and (index == len(connection_ends) or index % 100 == 0):
+            update(0.20 + 0.05 * index / len(connection_ends),
+                   f"grouping motorway exits ({index:,}/{len(connection_ends):,})")
     for node in shared_junctions:
         groups.find(("c", node))
         groups.union(("c", node), ("r", node))
 
     # --- regional key nodes ----------------------------------------------------------------------
     regional_nodes = regional.nodes()
-    neighbours = {node: {n for n, _, _ in regional.out.get(node, ())} | {n for n, _, _ in regional.inn.get(node, ())}
-                  for node in regional_nodes}
+    regional_node_list = list(regional_nodes)
+    neighbours = {}
+    for index, node in enumerate(regional_node_list, 1):
+        neighbours[node] = ({n for n, _, _ in regional.out.get(node, ())} |
+                            {n for n, _, _ in regional.inn.get(node, ())})
+        if update and (index == len(regional_node_list) or index % 1_000 == 0):
+            update(0.25 + 0.03 * index / len(regional_node_list),
+                   f"finding regional key junctions ({index:,}/{len(regional_node_list):,})")
     keys = {node for node in regional_nodes if len(regional_refs[node]) > 1 or len(neighbours[node]) == 1}
     keys |= shared_junctions
     regional_grid = Grid()
-    for node in regional_nodes:
+    for index, node in enumerate(regional_node_list, 1):
         regional_grid.add(node, points[node])
-    for node in (entries | exits) - shared_junctions:  # exact shared junctions are already joined
+        if update and (index == len(regional_node_list) or index % 1_000 == 0):
+            update(0.28 + 0.03 * index / len(regional_node_list),
+                   f"indexing regional junctions ({index:,}/{len(regional_node_list):,})")
+    snap_ends = list((entries | exits) - shared_junctions)
+    for index, node in enumerate(snap_ends, 1):  # exact shared junctions are already joined
         nearest = min(regional_grid.near(points[node], SNAP_METRES), key=lambda item: metres(points[node], item[1]), default=None)
         if nearest:
             keys.add(nearest[0])
             groups.union(("c", node), ("r", nearest[0]))
+        if update and (index == len(snap_ends) or index % 100 == 0):
+            update(0.31 + 0.03 * index / len(snap_ends),
+                   f"matching exits to regional roads ({index:,}/{len(snap_ends):,})")
     key_grid = Grid()
-    for node in keys:
+    key_nodes = list(keys)
+    for index, node in enumerate(key_nodes, 1):
         groups.find(("r", node))
         # Shared motorway/local junctions are exact turns. Merging even nearby ones would erase
         # the intervening local road and its one-way restriction.
@@ -246,17 +267,25 @@ def build_network(data: OsmData) -> Network:
         for other, _ in key_grid.near(points[node], REGIONAL_CLUSTER_METRES):
             groups.union(("r", node), ("r", other))
         key_grid.add(node, points[node])
+        if update and (index == len(key_nodes) or index % 250 == 0):
+            update(0.34 + 0.02 * index / len(key_nodes),
+                   f"grouping regional junctions ({index:,}/{len(key_nodes):,})")
 
     network = Network()
     members: dict[tuple, list[tuple]] = defaultdict(list)
-    for item in list(groups.parent):
+    group_items = list(groups.parent)
+    for index, item in enumerate(group_items, 1):
         members[groups.find(item)].append(item)
+        if update and (index == len(group_items) or index % 500 == 0):
+            update(0.36 + 0.02 * index / len(group_items),
+                   f"assembling logical junctions ({index:,}/{len(group_items):,})")
 
     def logical(kind_char: str, node: int) -> str:
         root = groups.find((kind_char, node))
         return ("c" if any(m[0] == "c" for m in members[root]) else "r") + str(root[1])
 
-    for root, items in members.items():
+    member_items = list(members.items())
+    for index, (root, items) in enumerate(member_items, 1):
         node_id = ("c" if any(m[0] == "c" for m in items) else "r") + str(root[1])
         lat = sum(points[m[1]][0] for m in items) / len(items)
         lon = sum(points[m[1]][1] for m in items) / len(items)
@@ -266,11 +295,16 @@ def build_network(data: OsmData) -> Network:
                                   "osm_nodes": sorted({member[1] for member in items}),
                                   "access_classes": sorted({road_class for member in items
                                                             for road_class in data.access_classes.get(member[1], ())})}
+        if update and (index == len(member_items) or index % 250 == 0):
+            update(0.38 + 0.02 * index / len(member_items),
+                   f"creating network nodes ({index:,}/{len(member_items):,})")
     for node in merges:
         network.nodes[f"m{node}"] = {"kind": "motorway", "lat": points[node][0], "lon": points[node][1],
                                      "roads": _ordered_numbers([w for _, w, _ in motorway.out[node] if w in motorway_ways], data),
                                      "name": "", "osm_nodes": [node]}
-    _name_connections(network, data)
+    _name_connections(network, data, update=update)
+    if update:
+        update(0.40, f"created {len(network.nodes):,} network nodes")
 
     # --- edges ------------------------------------------------------------------------------------
     candidates: dict[tuple[str, str, str], tuple] = {}
@@ -284,7 +318,8 @@ def build_network(data: OsmData) -> Network:
 
     motor_stops = merges | entries | exits | shared_junctions
     stop_motorway = lambda node: node in motor_stops
-    for start in motor_stops:
+    motorway_stops = list(motor_stops)
+    for index, start in enumerate(motorway_stops, 1):
         for end, (distance, path, ways) in walk(motorway, start, stop_motorway).items():
             start_is_motorway, end_is_motorway = start in merges, end in merges
             start_id = f"m{start}" if start_is_motorway else logical("c", start)
@@ -298,15 +333,26 @@ def build_network(data: OsmData) -> Network:
             else:
                 kind = "ramp_link"
             keep(kind, start_id, end_id, distance, path, ways)
+        if update and (index == len(motorway_stops) or index % 50 == 0):
+            update(0.40 + 0.25 * index / len(motorway_stops),
+                   f"tracing motorway links ({index:,}/{len(motorway_stops):,})")
     stop_regional = lambda node: node in keys
-    for start in keys:
+    regional_keys = list(keys)
+    for index, start in enumerate(regional_keys, 1):
         for end, (distance, path, ways) in walk(regional, start, stop_regional, limit_metres=60_000).items():
             keep("regional", logical("r", start), logical("r", end), distance, path, ways)
+        if update and (index == len(regional_keys) or index % 50 == 0):
+            update(0.65 + 0.20 * index / len(regional_keys),
+                   f"tracing regional links ({index:,}/{len(regional_keys):,})")
 
-    for (kind, start_id, end_id), (distance, path, ways) in candidates.items():
+    candidate_items = list(candidates.items())
+    for index, ((kind, start_id, end_id), (distance, path, ways)) in enumerate(candidate_items, 1):
         # a transfer edge also names the motorway it joins ("E40" then "E19")
         joins = [w for _, w, _ in motorway.out.get(path[-1], ()) if w in motorway_ways] if kind == "transfer" else []
         _add_split(network, data, kind, start_id, end_id, path, ways, joins)
+        if update and (index == len(candidate_items) or index % 100 == 0):
+            update(0.85 + 0.15 * index / len(candidate_items),
+                   f"creating route segments ({index:,}/{len(candidate_items):,})")
     # At a shared OSM junction on a motorway carriageway, the physical point serves two roles.
     # These zero-distance directed turns connect its motorway node to its regional connection node.
     for osm in shared_junctions & on_motorway:
@@ -320,16 +366,19 @@ def build_network(data: OsmData) -> Network:
                                           "roads": sorted(set(network.nodes[motor_id]["roads"]) |
                                                           set(network.nodes[connection_id]["roads"])),
                                           "metres": 0, "start": point, "end": point, "path": [point, point]}
+    if update:
+        update(1.0, f"built {len(network.edges):,} directed edges")
     return network
 
 
-def _name_connections(network: Network, data: OsmData) -> None:
+def _name_connections(network: Network, data: OsmData, update=None) -> None:
     """Name each exit after the nearest motorway-junction tag ("Antwerpen-Centrum (5)")."""
     grid = Grid()
     for node, tags in data.junctions.items():
         if node in data.points and (tags.get("name") or tags.get("ref")):
             grid.add(node, data.points[node])
-    for node in network.nodes.values():
+    network_nodes = list(network.nodes.values())
+    for index, node in enumerate(network_nodes, 1):
         if node["kind"] != "connection":
             continue
         point = (node["lat"], node["lon"])
@@ -337,6 +386,9 @@ def _name_connections(network: Network, data: OsmData) -> None:
         if nearest:
             tags = data.junctions[nearest[0]]
             node["name"] = " ".join(filter(None, [tags.get("name"), f"({tags['ref']})" if tags.get("ref") else None]))
+        if update and (index == len(network_nodes) or index % 250 == 0):
+            update(0.39 + 0.01 * index / len(network_nodes),
+                   f"naming exit connections ({index:,}/{len(network_nodes):,})")
 
 
 def _add_split(network: Network, data: OsmData, kind: str, start_id: str, end_id: str,

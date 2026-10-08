@@ -54,11 +54,15 @@ def main() -> None:
     print(f"\ncoverage: {len(covered):,} of {len(targets):,} measurable edges "
           f"({len(covered) / len(targets):.1%}) have at least one accepted measurement")
 
-    rejected = [row for row in rows if not row.accepted]
+    carried = [row for row in rows if not row.accepted and "shorter than" in (row.rejected_because or "")]
+    if carried:
+        print(f"{len(carried):,} legs were stretches a chain drove through to reach what it was for, "
+              f"too short to judge; they are not failures")
+    rejected = [row for row in rows if not row.accepted and row not in carried]
     if rejected:
         kinds = Counter(network["edges"][row.edge_id]["kind"] for row in rejected
                         if row.edge_id in network["edges"])
-        print(f"\n{len(rejected):,} rejected ({len(rejected) / len(rows):.0%}), by edge kind: {dict(kinds)}")
+        print(f"\n{len(rejected):,} genuinely rejected ({len(rejected) / max(len(rows) - len(carried), 1):.0%} of what was judged), by edge kind: {dict(kinds)}")
         reasons = Counter("no distance" if "no distance" in (row.rejected_because or "")
                           else "wrong road" if "route over" in (row.rejected_because or "")
                           else "length" for row in rejected)

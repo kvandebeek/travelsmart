@@ -158,3 +158,19 @@ def test_an_edge_too_short_to_measure_is_not_targeted():
     chains = build_chains({"short": edge("n1", "n2", metres=150),
                            "long": edge("n2", "n3", metres=1500)})
     assert [c["edges"] for c in chains] == [["short", "long"]]
+
+
+def test_a_leg_a_chain_only_drove_through_is_not_called_a_failure():
+    # A chain crosses stretches too short to judge to reach the ones it is for. Their legs come
+    # back anyway, and marking them failed would blame the edge for something nobody asked of it.
+    from types import SimpleNamespace
+
+    from travelsmart.measure.collect import TOO_SHORT, rows_for_chain
+
+    chain = {"id": "c1", "edges": ["short", "long"]}
+    edges = {"short": edge("n1", "n2", metres=150), "long": edge("n2", "n3", metres=2000)}
+    legs = [SimpleNamespace(metres=900, seconds=60, free_flow_seconds=None, typical_seconds=None),
+            SimpleNamespace(metres=2050, seconds=120, free_flow_seconds=None, typical_seconds=None)]
+    rows = rows_for_chain(chain, legs, edges, "tomtom")
+    assert rows[0].rejected_because == TOO_SHORT and not rows[0].accepted
+    assert rows[1].accepted

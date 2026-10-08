@@ -16,7 +16,12 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 from travelsmart.db import LegMeasurement
+from travelsmart.measure.chains import measurable
 from travelsmart.measure.validation import accepts
+
+# A chain drives through stretches too short to judge to reach the ones it is for. Their legs come
+# back anyway, and calling them failures would blame the edge for something nobody asked of it.
+TOO_SHORT = "shorter than the measurable minimum, carried by the chain rather than measured"
 
 LOCAL = ZoneInfo("Europe/Brussels")
 
@@ -51,7 +56,7 @@ def rows_for_chain(chain: dict, legs, edges: dict[str, dict], provider: str,
         edge = edges[edge_id]
         moment = getattr(leg, "departure", None) or requested_at
         weekday, half_hour = half_hour_of(moment)
-        ok, why = accepts(edge, leg.metres)
+        ok, why = (False, TOO_SHORT) if not measurable(edge) else accepts(edge, leg.metres)
         rows.append(LegMeasurement(
             edge_id=edge_id, provider=provider, chain_id=chain["id"],
             departure_utc=moment.astimezone(timezone.utc), weekday=weekday, half_hour=half_hour,

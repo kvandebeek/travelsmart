@@ -19,6 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from travelsmart.db import make_session_factory
+from travelsmart.measure.budget import BUDGETS, remaining_today
 from travelsmart.measure.chains import chain_waypoints
 from travelsmart.measure.collect import Stored, rows_for_chain, store
 from travelsmart.providers import here, tomtom
@@ -59,6 +60,17 @@ def main() -> None:
     keys = tomtom.api_keys() if args.provider == "tomtom" else [here.api_key()]
     sessions = make_session_factory()
     totals, failures = Stored(), Counter()
+
+    # Checked against what is stored, so a restarted collector cannot forget what it already spent.
+    with sessions() as session:
+        left = remaining_today(session, args.provider)
+    if not args.dry_run and len(chosen) > left:
+        print(f"{args.provider} has {left} of {BUDGETS[args.provider].daily_allowance()} requests "
+              f"left today; measuring {left} chains instead of {len(chosen)}", file=sys.stderr)
+        chosen = chosen[:left]
+    if not chosen:
+        print(f"{args.provider}'s budget for today is spent", file=sys.stderr)
+        return
 
     for index, chain in enumerate(chosen):
         waypoints = chain_waypoints(chain, network["nodes"], network["edges"])[:module.MAX_WAYPOINTS]

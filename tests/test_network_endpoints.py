@@ -189,3 +189,12 @@ def test_zone_area_is_measured_in_hectares():
 def test_belgium_bounds_are_a_rough_guard():
     assert in_belgium(50.8357, 4.3365)      # Brussels
     assert not in_belgium(52.378, 4.900)    # Amsterdam
+
+
+def test_an_endpoint_is_weighted_by_whatever_count_osm_carries():
+    from travelsmart.network.endpoints import endpoint_weight
+    assert endpoint_weight({"amenity": "hospital", "beds": "412"}) == 412
+    assert endpoint_weight({"amenity": "school", "capacity": "680"}) == 680
+    assert endpoint_weight({"amenity": "parking", "capacity:persons": "95"}) == 95
+    assert endpoint_weight({"amenity": "school"}) == 0.0
+    assert endpoint_weight({"beds": "lots"}) == 0.0        # free text is not a count

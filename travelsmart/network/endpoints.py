@@ -25,7 +25,7 @@ BELGIUM_BOUNDS = (49.40, 2.50, 51.60, 6.45)
 BELGIAN_UIC = "88"
 # A landuse polygon this small is a workshop or a corner shop, not a destination worth measuring.
 MIN_ZONE_HECTARES = 2.0
-OSM_ENDPOINT_VERSION = 2
+OSM_ENDPOINT_VERSION = 3
 SNAP_METRES = 2_000         # an endpoint further than this from a selected road gets no access edge
 MAX_ACCESS_METRES = 5_000   # §4: access edges are 0.5-5 km
 ACCESS_NODES = 2            # §4: an endpoint cluster links to its 1-2 nearest network nodes
@@ -114,6 +114,19 @@ def endpoint_category(tags: dict) -> str | None:
 
 
 ZONE_CATEGORIES = {"business_park", "retail", "airport"}   # judged by area, so only as a polygon
+# §3.3 weights an endpoint by how much traffic it draws: beds, pupils, jobs. The official registers
+# hold those, but OpenStreetMap carries some of them already, and reading them here costs nothing.
+# A zone has no such count and is weighted by its area in hectares instead.
+WEIGHT_TAGS = ("beds", "capacity:persons", "capacity")
+
+
+def endpoint_weight(tags: dict) -> float:
+    """What this place is worth as a destination, from whichever count OpenStreetMap carries."""
+    for key in WEIGHT_TAGS:
+        value = (tags.get(key) or "").strip()
+        if value.isdigit():
+            return float(value)
+    return 0.0
 
 
 def _hectares(ring: list[tuple[float, float]]) -> float:
@@ -186,7 +199,8 @@ def load_osm_endpoints(extract, progress=print) -> list[Endpoint]:
                 if category not in ZONE_CATEGORIES and in_belgium(obj.location.lat, obj.location.lon):
                     found.append(Endpoint(id=f"{category}:n{obj.id}", category=category,
                                           name=(tags.get("name") or "").strip(),
-                                          lat=round(obj.location.lat, 7), lon=round(obj.location.lon, 7)))
+                                          lat=round(obj.location.lat, 7), lon=round(obj.location.lon, 7),
+                                          weight=endpoint_weight(tags)))
             else:
                 areas[obj.id] = (category, tags, [node.ref for node in obj.nodes])
         if scanned % 1_000_000 == 0:
@@ -211,7 +225,8 @@ def load_osm_endpoints(extract, progress=print) -> list[Endpoint]:
             continue
         found.append(Endpoint(id=f"{category}:w{way_id}", category=category,
                               name=(tags.get("name") or "").strip(), lat=round(lat, 7), lon=round(lon, 7),
-                              weight=round(hectares, 2) if category in ZONE_CATEGORIES else 0.0))
+                              weight=round(hectares, 2) if category in ZONE_CATEGORIES
+                              else endpoint_weight(tags)))
     before = len(found)
     found = deduplicate(found)
     progress(f"endpoint scan 100%: {len(found):,} places read "

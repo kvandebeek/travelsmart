@@ -217,7 +217,16 @@ which edges the route uses.
 
 **Validation.** A small rotating sample of direct A → B trips is measured as a whole (Google and
 TomTom). Comparing them with the stitched route shows how well chaining works, per region and time
-of day, and is published alongside the results.
+of day, and is published alongside the results. `scripts/validate_stitching.py` does this and
+separates the two reasons a trip can disagree: the graph may have routed another way than the
+provider drove, which shows in the distance, or it may agree on the way and differ on the time.
+
+**First run, 9 October 2026** (five trips of 80-175 km, before any of them had measurements, so the
+stitched times were pure free flow): the median stitched time was +4% against TomTom's direct
+answer, spread -4% to +16%. The four trips where the graph chose the same way as TomTom agreed
+within -4% to +6%; the single +16% outlier was also the one whose route ran 11% longer. So the
+disagreement that matters tracks routing, not timing, and the network's lengths and connectivity
+reproduce a real route closely enough to build on.
 
 ## 10. What the user sees
 

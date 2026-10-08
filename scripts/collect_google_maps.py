@@ -22,15 +22,19 @@ from zoneinfo import ZoneInfo
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from travelsmart.google_maps_import import distance_km_in
+
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL_TIMEZONE = ZoneInfo("Europe/Brussels")
+
 TRAVEL_TIME = re.compile(
     r"(?:(?:\d+\s*(?:h|hr|hrs|hour|hours|u|uur)\s*)?\d+\s*"
     r"(?:min|mins|minute|minutes)\b|\d+\s*(?:h|hr|hrs|hour|hours|u|uur)\b)",
     re.IGNORECASE,
 )
-DISTANCE_KM = re.compile(r"(\d+(?:[.,]\d+)?)\s*km\b", re.IGNORECASE)
 # Google's consent page button; English first, with the Belgian languages as fallbacks.
 CONSENT_BUTTON = re.compile(r"^\s*(?:reject all|alles afwijzen|tout refuser|alle ablehnen)\s*$",
                             re.IGNORECASE)
@@ -130,12 +134,12 @@ def visible_routes(page) -> list[dict]:
         rank = int(card.get_attribute("data-trip-index") or index)
         if not travel_time or rank in routes:   # Google repeats card 0 as a bare "Preview" element
             continue
-        distance = next((match for line in lines if (match := DISTANCE_KM.fullmatch(line))), None)
+        distance = next((km for line in lines if (km := distance_km_in(line)) is not None), None)
         via = next((line for line in lines if line.startswith("via ")), None)
         after_via = lines[lines.index(via) + 1:] if via else []
         routes[rank] = {
             "rank": rank, "travel_time_text": travel_time, "travel_time_minutes": duration_minutes(travel_time),
-            "distance_km": float(distance.group(1).replace(",", ".")) if distance else None,
+            "distance_km": distance,
             "via": via[4:] if via else None,
             "note": next((line for line in after_via if line not in ("Details", "Preview")), None),
         }
@@ -224,7 +228,7 @@ def capture(page, *, origin: Point, destination: Point, output_dir: Path,
     captured_at = datetime.now(LOCAL_TIMEZONE)
     output_dir.mkdir(parents=True, exist_ok=True)
     travel_time = TRAVEL_TIME.search(route_text).group(0) if route_text else None
-    distance = DISTANCE_KM.search(route_text) if route_text else None
+    distance = distance_km_in(route_text)
     record = {
         "captured_at": captured_at.isoformat(),
         "sweep_id": sweep_id,
@@ -238,7 +242,7 @@ def capture(page, *, origin: Point, destination: Point, output_dir: Path,
         "destination_location": destination.location,
         "travel_time_text": travel_time,
         "travel_time_minutes": duration_minutes(travel_time) if travel_time else None,
-        "distance_km": float(distance.group(1).replace(",", ".")) if distance else None,
+        "distance_km": distance,
         "route_card_text": route_text,
         "via": routes[0]["via"] if routes and routes[0]["rank"] == 0 else None,
         "routes": routes,

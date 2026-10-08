@@ -26,6 +26,22 @@ def capture_files(source_root: Path) -> list[Path]:
 
 # Belgian road numbers in Google's "via" text: E- and A-motorways, N-roads and R-rings.
 ROAD_CODE = re.compile(r"\b[EANR]\d{1,4}\b")
+DISTANCE_KM = re.compile(r"(\d+(?:[.,]\d+)?)\s*km\b", re.IGNORECASE)
+# Google writes a short route in metres ("650 m"), which matters for ramps and short stretches: they
+# would otherwise come back without a distance at all. "min" is not a match, as m must end the word.
+DISTANCE_METRES = re.compile(r"(\d+(?:[.,]\d+)?)\s*m\b", re.IGNORECASE)
+
+
+def distance_km_in(text: str | None) -> float | None:
+    """The route's distance in kilometres, whether Google wrote it in km or in metres."""
+    if not text:
+        return None
+    if match := DISTANCE_KM.search(text):
+        return float(match.group(1).replace(",", "."))
+    if match := DISTANCE_METRES.search(text):
+        return float(match.group(1).replace(",", ".")) / 1000
+    return None
+
 # Older captures only kept the whole card as one line: "21 min 26.2 km via E40 Best route now ...".
 VIA_IN_CARD = re.compile(r"\bvia (.+?)(?= (?:Fastest|Best|Some|Heavy|Light|Moderate|Usual|Details|Preview)\b| \d+ (?:min|hr)\b|$)")
 

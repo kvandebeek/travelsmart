@@ -132,3 +132,14 @@ def test_accepts_explains_why_a_measurement_was_rejected():
     assert not ok and "N9" in why
     # TomTom and HERE name no roads, so their legs are judged on length alone.
     assert accepts(stretch, 1050)[0]
+
+
+def test_google_distances_are_read_in_km_and_in_metres():
+    # Short routes, which is most ramps, are written in metres and used to come back as no distance.
+    from travelsmart.google_maps_import import distance_km_in
+    assert distance_km_in("21.1 km") == 21.1
+    assert distance_km_in("1,2 km") == 1.2
+    assert distance_km_in("650 m") == 0.65
+    assert distance_km_in("24 min") is None          # "min" must not read as metres
+    assert distance_km_in("5 min 650 m") == 0.65
+    assert distance_km_in(None) is None

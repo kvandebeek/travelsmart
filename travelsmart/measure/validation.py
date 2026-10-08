@@ -31,14 +31,22 @@ def roads_in_text(text: str) -> set[str]:
 
 
 def drove_intended_road(intended: list[str], text: str) -> bool:
-    """Whether a described route used one of the edge's intended road numbers.
+    """Whether a described route is consistent with the edge's intended road numbers.
 
-    An edge with no intended number is a local stretch between junctions, which no description names;
-    those are judged on length alone.
+    A description that names *no* number is not evidence of a detour. Google labels a route by what
+    the signs say, and most Belgian N-roads are signed by street name: the N35 appears as "via Kouter
+    and Tieltsesteenweg". Demanding the number there would throw away most regional measurements,
+    while the length check already rules out a route that went somewhere else entirely.
+
+    What does mean a detour is a description naming a different numbered road, so that is what is
+    rejected. An edge with no intended number is judged on length alone.
     """
     if not intended:
         return True
-    return bool(set(intended) & roads_in_text(text))
+    named = roads_in_text(text)
+    if not named:
+        return True
+    return bool(set(intended) & named)
 
 
 def accepts(edge: dict, measured_metres: float, *, text: str | None = None,

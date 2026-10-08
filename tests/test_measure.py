@@ -107,11 +107,20 @@ def test_road_numbers_are_read_out_of_a_route_description():
     assert roads_in_text("via Chaussée de Charleroi") == set()
 
 
-def test_a_route_over_another_road_is_rejected():
+def test_a_route_over_another_numbered_road_is_rejected():
     assert drove_intended_road(["E40"], "via E40")
     assert drove_intended_road(["E40", "A10"], "via A10 and some street")
     assert not drove_intended_road(["E40"], "via N9")
     assert drove_intended_road([], "via anything")   # a local stretch no description names
+
+
+def test_a_route_named_only_by_street_is_not_treated_as_a_detour():
+    # Google labels a route the way the signs do, and most Belgian N-roads are signed by street
+    # name: the N35 shows up as "via Kouter and Tieltsesteenweg". That is the N35, not a detour.
+    assert drove_intended_road(["N35"], "Kouter and Tieltsesteenweg")
+    assert drove_intended_road(["N70"], "Grote Baan")
+    # Naming a different numbered road still is one.
+    assert not drove_intended_road(["N35"], "Kouter and E17")
 
 
 def test_accepts_explains_why_a_measurement_was_rejected():

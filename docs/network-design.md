@@ -91,7 +91,11 @@ its region.
 
 **Edge validation.** A measurement only counts for an edge if the provider drove the intended road:
 
-- Google: the "via" text must contain the intended road number, and distance within ±15% of expected.
+- Google: distance within ±15% of expected, and the "via" text must not name a *different* numbered
+  road. Requiring it to name the intended number does not work in practice: Google labels a route the
+  way the signs do, and most Belgian N-roads are signed by street name, so the N35 comes back as
+  "via Kouter and Tieltsesteenweg". A description naming no number at all is therefore judged on
+  length alone; one naming another number is a detour and is rejected.
 - TomTom/HERE: leg length within ±15% of expected (their legs carry no road names).
 
 Edges that keep failing validation have badly placed nodes and are fixed in the network, not in

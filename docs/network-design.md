@@ -132,8 +132,10 @@ One Calculate Route request takes up to **150 waypoints** and returns a summary 
 **chains**: paths along neighbouring nodes, up to ~150 legs each. One request then measures a whole
 chain, in exact seconds. Each leg's moment is its own `departureTime`, so legs are stored for the
 moment they are actually driven. TomTom documents per-leg times but not explicitly that traffic on
-later legs is evaluated for the time they are reached; the first test call checks this by
-comparing a chain's legs with single-leg requests.
+later legs is evaluated for the time they are reached. **Checked on 9 October 2026**: a 22-leg chain
+came back with each leg's `departureTime` advancing along the route, from 23:18 to 00:31, so a leg
+is indeed timed for the moment it is reached rather than for the moment of the request. Note that
+this makes the later legs a forecast for that moment, not live traffic.
 
 Budget: the free tier is 20,000 requests/month per account. Two accounts, minus a reserve, give
 roughly 1,200 requests/day. If a chain request counts as one transaction (undocumented; checked on

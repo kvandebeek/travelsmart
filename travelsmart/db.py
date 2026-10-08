@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 from pathlib import Path
-from sqlalchemy import DateTime, Float, Integer, String, create_engine
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 class Base(DeclarativeBase): pass
@@ -104,6 +104,34 @@ class JamObservation(Base):
     end1_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
     end2_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     end2_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+class LegMeasurement(Base):
+    """One provider's time for one network edge at one moment (docs/network-design.md §7).
+
+    The raw firehose: ~100,000 rows a day, kept on the collector machine and never in Git. Profiles
+    in §8 are built from these. A leg is stored for the moment it is actually driven, which on a
+    chain is its own departure time, not the chain's.
+
+    Rejected measurements are stored too, with `accepted` false and the reason: a provider that keeps
+    routing around an edge is evidence about the network, not noise to drop silently.
+    """
+    __tablename__ = "leg_measurements"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    edge_id: Mapped[str] = mapped_column(String(20), index=True)
+    provider: Mapped[str] = mapped_column(String(20), index=True)
+    chain_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    departure_utc: Mapped[object] = mapped_column(DateTime(timezone=True), index=True)
+    weekday: Mapped[int] = mapped_column(Integer)          # local weekday, 0 = Monday
+    half_hour: Mapped[int] = mapped_column(Integer)        # local half hour of the day, 0-47
+    seconds: Mapped[float] = mapped_column(Float)
+    free_flow_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    typical_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    metres: Mapped[float | None] = mapped_column(Float, nullable=True)
+    roads: Mapped[str | None] = mapped_column(String(100), nullable=True)   # what the provider drove
+    accepted: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    rejected_because: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True))
+
 
 class SourceState(Base):
     __tablename__ = "source_state"

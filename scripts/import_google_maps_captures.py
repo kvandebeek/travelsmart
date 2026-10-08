@@ -16,10 +16,13 @@ def main() -> None:
     parser.add_argument("--output", type=Path,
                         default=ROOT / "observations" / "google_maps" / "captures.jsonl")
     parser.add_argument("--delete-sources", action="store_true",
-                        help="Remove capture folders after the combined file is written; stop collectors first")
+                        help="Remove capture folders after the combined file is written; stop collectors for those folders first")
+    parser.add_argument("--keep-folder", type=Path, action="append", default=[],
+                        help="Leave this capture folder in place during cleanup; repeat as needed")
     args = parser.parse_args()
     print(json.dumps(import_captures(source_root=args.source_root, output=args.output,
-                                     delete_sources=args.delete_sources)))
+                                     delete_sources=args.delete_sources,
+                                     keep_folders=tuple(args.keep_folder))))
 
 
 if __name__ == "__main__":

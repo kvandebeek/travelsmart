@@ -56,3 +56,19 @@ def test_cleanup_removes_only_imported_capture_folders(tmp_path):
     result = import_captures(source_root=source, output=target, delete_sources=True)
     assert result["deleted_folders"] == 1 and target.exists()
     assert not folder.exists() and (profile / "Preferences").exists()
+
+
+def test_cleanup_can_keep_a_running_collector_folder(tmp_path):
+    source = tmp_path / "data"
+    active = source / "google_maps_captures"
+    inactive = source / "google_maps_other_captures"
+    for folder in (active, inactive):
+        folder.mkdir(parents=True)
+        (folder / "captures.jsonl").write_text(
+            json.dumps(_capture("2026-10-08T09:00:00+02:00", "Aalst", "Brussels", 35)) + "\n",
+            encoding="utf-8")
+    result = import_captures(source_root=source,
+                             output=tmp_path / "observations" / "google_maps" / "captures.jsonl",
+                             delete_sources=True, keep_folders=(active,))
+    assert result["deleted_folders"] == 1 and result["kept_folders"] == 1
+    assert active.exists() and not inactive.exists()

@@ -87,13 +87,17 @@ def _read_source(path: Path, source_root: Path) -> list[dict]:
 
 def import_captures(*, source_root: Path = ROOT / "data",
                     output: Path = ROOT / "observations" / "google_maps" / "captures.jsonl",
-                    delete_sources: bool = False) -> dict:
+                    delete_sources: bool = False,
+                    keep_folders: tuple[Path, ...] = ()) -> dict:
     source_root = source_root.resolve()
     output = output.resolve()
     if not source_root.is_dir():
         raise ValueError(f"source folder does not exist: {source_root}")
     if output.is_relative_to(source_root):
         raise ValueError("output must be outside the source folder")
+    protected = {folder.resolve() for folder in keep_folders}
+    if any(not folder.is_relative_to(source_root) for folder in protected):
+        raise ValueError("kept folders must be inside the source folder")
     files = capture_files(source_root)
     existing = {}
     if output.exists():
@@ -123,14 +127,16 @@ def import_captures(*, source_root: Path = ROOT / "data",
         temporary.unlink(missing_ok=True)
     deleted = 0
     if delete_sources:
-        for path in files:
+        removable = [path for path in files if path.parent.resolve() not in protected]
+        for path in removable:
             if not path.exists() or (path.stat().st_size, path.stat().st_mtime_ns) != snapshots[path]:
                 raise ValueError(f"{path} changed during import; source folders were kept")
             if path.parent.resolve() == source_root or not path.parent.resolve().is_relative_to(source_root):
                 raise ValueError(f"refusing to delete outside a capture subfolder: {path.parent}")
-        for path in files:
+        for path in removable:
             shutil.rmtree(path.parent)
             deleted += 1
     return {"source_files": len(files), "new_observations": added,
             "total_observations": len(ordered), "deleted_folders": deleted,
+            "kept_folders": len(files) - deleted if delete_sources else len(files),
             "output": str(output)}

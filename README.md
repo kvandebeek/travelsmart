@@ -189,6 +189,7 @@ When all browser collectors have stopped and the combined file is verified, remo
 ```
 
 This removes capture folders and optional screenshots, while keeping browser profile folders. Repeat the import after later collection rounds; existing observations are preserved.
+If one collector is still running, add `--keep-folder data\google_maps_captures` to remove the other finished capture folders while leaving that folder untouched. Run the import again after it finishes.
 
 **Changing the places:**
 

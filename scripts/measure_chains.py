@@ -61,7 +61,7 @@ def main() -> None:
     totals, failures = Stored(), Counter()
 
     for index, chain in enumerate(chosen):
-        waypoints = chain_waypoints(chain, network["nodes"])[:module.MAX_WAYPOINTS]
+        waypoints = chain_waypoints(chain, network["nodes"], network["edges"])[:module.MAX_WAYPOINTS]
         if len(waypoints) < 2:
             continue
         if args.dry_run:

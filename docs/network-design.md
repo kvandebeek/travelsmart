@@ -160,6 +160,11 @@ recommends at most ~100); each stopover via starts a section with its own `durat
 traffic), `baseDuration` (free flow) and, on request, `typicalDuration`. Use it for a rotating
 sample of chains, as a third opinion to detect provider bias.
 
+**Checked on 9 October 2026**: on the same 34-leg chain, HERE's sections failed §4's length check
+far more often than TomTom's (9 of 34 against 1 of 22), and the failures are concentrated on ramp
+edges, roughly four in ten of them. Ramps are short, so the 15% tolerance is tight, and HERE snaps a
+stopover on a slip road less precisely. Point its sample at backbone chains rather than ramps.
+
 ### 6.4 Access and ramp edges
 
 Measured a few times per day each (TomTom chains through endpoint clusters, or Google), because

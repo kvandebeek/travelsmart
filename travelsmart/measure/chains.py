@@ -86,6 +86,19 @@ def _pick(candidates: list[str], unused: set[str], measured: dict[str, dict],
     return max(bridges, key=lambda edge_id: measured[edge_id]["metres"], default=None)
 
 
-def chain_waypoints(chain: dict, nodes: dict[str, dict]) -> list[tuple[float, float]]:
-    """The chain's nodes as (lat, lon), the waypoints a provider request asks for."""
-    return [(nodes[node_id]["lat"], nodes[node_id]["lon"]) for node_id in chain["nodes"]]
+def chain_waypoints(chain: dict, nodes: dict[str, dict],
+                    edges: dict[str, dict] | None = None) -> list[tuple[float, float]]:
+    """The waypoints a provider request asks for, as (lat, lon) in driving order.
+
+    These come from the edges, not the nodes. A node is a *cluster* of OSM junctions and its lat/lon
+    is their average, which can sit between carriageways or beside the road; a provider snapping to
+    that can pick the wrong carriageway and detour kilometres. Each edge carries its own start and
+    end on the carriageway it uses (§4), so asking from one edge's start to its end drives exactly
+    that stretch, in that direction.
+    """
+    if not edges:
+        return [(nodes[node_id]["lat"], nodes[node_id]["lon"]) for node_id in chain["nodes"]]
+    first = edges[chain["edges"][0]]
+    points = [tuple(first["start"])]
+    points += [tuple(edges[edge_id]["end"]) for edge_id in chain["edges"]]
+    return points

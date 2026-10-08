@@ -76,6 +76,17 @@ def test_chain_waypoints_follow_the_node_path():
     assert chain_waypoints(chain, nodes) == [(51.0, 5.0), (51.1, 5.1), (51.2, 5.2)]
 
 
+def test_chain_waypoints_prefer_the_carriageway_points_of_each_edge():
+    # The node sits between the two carriageways; the edge's own ends sit on the road itself, and a
+    # request built from the node would let a provider snap to the wrong side and detour.
+    edges = {"a": dict(edge("n1", "n2"), start=[51.001, 5.001], end=[51.101, 5.101]),
+             "b": dict(edge("n2", "n3"), start=[51.101, 5.101], end=[51.201, 5.201])}
+    nodes = {"n1": {"lat": 51.0, "lon": 5.0}, "n2": {"lat": 51.1, "lon": 5.1},
+             "n3": {"lat": 51.2, "lon": 5.2}}
+    chain = build_chains(edges)[0]
+    assert chain_waypoints(chain, nodes, edges) == [(51.001, 5.001), (51.101, 5.101), (51.201, 5.201)]
+
+
 def test_a_chain_needs_at_least_one_leg():
     with pytest.raises(ValueError):
         build_chains({"a": edge("n1", "n2")}, max_legs=0)

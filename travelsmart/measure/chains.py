@@ -50,18 +50,22 @@ def build_chains(edges: dict[str, dict], max_legs: int = MAX_LEGS,
     """
     if max_legs < 1:
         raise ValueError("a chain needs at least one leg")
-    measured = {edge_id: edge for edge_id, edge in edges.items()
-                if measurable(edge, kinds, min_metres)}
+    # Anything of a measured kind may be *driven* through, including stretches too short to judge:
+    # they are the connectors that keep a chain long, and dropping them splintered the chains into
+    # half the length and a third more requests. What they are not is a reason to send a request, so
+    # coverage is tracked over the measurable ones alone.
+    measured = {edge_id: edge for edge_id, edge in edges.items() if edge["kind"] in kinds}
+    needed = {edge_id for edge_id, edge in measured.items() if edge["metres"] >= min_metres}
     out_edges: dict[str, list[str]] = defaultdict(list)
     in_edges: dict[str, list[str]] = defaultdict(list)
     for edge_id, edge in measured.items():
         out_edges[edge["from"]].append(edge_id)
         in_edges[edge["to"]].append(edge_id)
 
-    unused = set(measured)
+    unused = set(needed)
     chains = []
     # Longest first, so a chain starts on a stretch that is expensive to measure on its own.
-    for seed in sorted(measured, key=lambda edge_id: -measured[edge_id]["metres"]):
+    for seed in sorted(needed, key=lambda edge_id: -measured[edge_id]["metres"]):
         if seed not in unused:
             continue
         unused.discard(seed)

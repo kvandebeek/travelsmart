@@ -152,6 +152,9 @@ def test_an_edge_too_short_to_measure_is_not_targeted():
     assert measurable(edge("n1", "n2", metres=1000))
     assert not measurable(edge("n1", "n2", metres=150))
     assert not measurable(edge("n1", "n2", kind="access", metres=1000))
+    # Nothing is requested for a short edge's sake: on its own it produces no chain at all.
+    assert build_chains({"short": edge("n1", "n2", metres=150)}) == []
+    # It may still be driven through, because those connectors are what keep a chain long.
     chains = build_chains({"short": edge("n1", "n2", metres=150),
                            "long": edge("n2", "n3", metres=1500)})
-    assert [c["edges"] for c in chains] == [["long"]]
+    assert [c["edges"] for c in chains] == [["short", "long"]]

@@ -176,6 +176,8 @@ After the local browser collectors finish, consolidate every `data/**/captures.j
 
 The importer converts each capture to the same observation fields used by TomTom and HERE (`provider`, `route_id`, `observed_at`, `duration_seconds`, `distance_m`, and status), keeps Google route names and source details, and skips captures already imported. Failed route reads remain as error observations. It does not invent a free-flow time or traffic delay from Google's page. The dashboard export merges these records into the monthly results, route list, recent feed, and charts. Google routes keep their actual endpoints rather than being treated as identical to a nearby TomTom or HERE commute. The combined observation file is tracked by Git; local `data/` files are not.
 
+The **When is it calm?** map also uses Google captures, grouped per 2025 municipality. A municipality that contains a commute town (or, for Brussels, any of its 19 municipalities) joins that town's entry; other municipalities appear as their own places. Because Google shows no free-flow time, each Google route's empty-road time is its own 5th-percentile travel time, used once the route has at least 10 successful captures. Captures from quiet times of day make that reference reliable; with only busy-hour captures it is too slow and the map looks calmer than it is. Municipality points and the municipality of each Google location come from `scripts/build_municipality_points.py`; rerun it after adding new Google Maps points.
+
 When all browser collectors have stopped and the combined file is verified, remove the old capture folders while importing any final captures:
 
 ```powershell
@@ -189,6 +191,7 @@ If one collector is still running, add `--keep-folder data\google_maps_captures`
 
 ```bash
 python scripts/select_home_places.py --statbel-dir <statbel>   # neighbourhoods from population data
+python scripts/build_municipality_points.py --statbel-dir <statbel>  # municipality points for Google captures on the map
 python scripts/build_commute_catalogue.py                      # snap to roads, pair, measure road distance
 ```
 
@@ -199,6 +202,8 @@ python scripts/build_commute_catalogue.py                      # snap to roads, 
 config/
   commute_catalogue.yaml   towns, employment areas, pairing rules
   commute_homes.yaml       neighbourhoods per town (generated from Statbel)
+  belgian_municipality_points.csv       main point per municipality + its commute town (Statbel)
+  google_maps_place_municipalities.csv  municipality of each Google Maps location
   commute_anchors.yaml     road-snapped points + road distance per route
   commute_routes.csv       every start place → employment area route
   commute_schedule.yaml    departure slots, caps, priority commutes

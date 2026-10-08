@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -110,6 +111,10 @@ def export_commutes(*, config_dir: Path = ROOT / "config", data_dir: Path = ROOT
 MAP_BUCKET_MINUTES = 30
 MAP_HOURS = (5, 19)            # buckets from 05:00 up to 18:30
 MAP_MIN_SAMPLES = 3            # fewer measurements: shown as "not enough data yet"
+# Google Maps shows no free-flow time: a route's empty-road time is its own 5th-percentile travel time,
+# once it has enough successful measurements for that to mean something.
+MAP_BASELINE_PERCENTILE = 0.05
+MAP_BASELINE_MIN_SAMPLES = 10
 # Congestion = travel time vs an empty road (provider free-flow time), as a share.
 MAP_LEVELS = [{"id": "calm", "label": "Calm", "below": 0.10},
               {"id": "moderate", "label": "Moderate", "below": 0.25},
@@ -125,12 +130,61 @@ def _bucket(observed_at: str) -> str | None:
     return f"{local.hour:02d}:{minute:02d}"
 
 
+def _percentile(values: list[float], share: float) -> float:
+    ordered = sorted(values)
+    position = share * (len(ordered) - 1)
+    low = math.floor(position)
+    high = min(low + 1, len(ordered) - 1)
+    return ordered[low] + (ordered[high] - ordered[low]) * (position - low)
+
+
+def _municipality_places(config_dir: Path) -> tuple[dict[str, str], dict[str, dict]]:
+    """Google location -> map place key, and the places themselves (scripts/build_municipality_points.py).
+
+    A municipality that holds a commute catalogue town uses that town's key, so both data sources
+    meet in one place; other municipalities get their own key.
+    """
+    points_file = config_dir / "belgian_municipality_points.csv"
+    locations_file = config_dir / "google_maps_place_municipalities.csv"
+    if not points_file.exists() or not locations_file.exists():
+        return {}, {}
+    with points_file.open(encoding="utf-8", newline="") as file:
+        municipalities = {row["nis_code"]: row for row in csv.DictReader(file)}
+    key = {code: row["map_area"] or f"nis_{code}" for code, row in municipalities.items()}
+    places = {}
+    for code, row in municipalities.items():  # catalogue towns normally have their own point already
+        places.setdefault(key[code], {"name": row["name"], "point": [float(row["lat"]), float(row["lon"])]})
+    with locations_file.open(encoding="utf-8", newline="") as file:
+        location_key = {row["location"]: key[row["nis_code"]] for row in csv.DictReader(file)}
+    return location_key, places
+
+
+def _google_samples(travel: list[dict], location_key: dict[str, str]) -> list[tuple[str, str, dict, float]]:
+    """(origin place, destination place, row, congestion share) for Google trips between two places."""
+    durations: dict[str, list[float]] = defaultdict(list)
+    for row in travel:
+        if row.get("provider") == "google_maps" and row.get("status") == "ok" and row.get("duration_seconds"):
+            durations[row["route_id"]].append(row["duration_seconds"])
+    baseline = {route: _percentile(values, MAP_BASELINE_PERCENTILE)
+                for route, values in durations.items() if len(values) >= MAP_BASELINE_MIN_SAMPLES}
+    samples = []
+    for row in travel:
+        if row.get("provider") != "google_maps" or row["route_id"] not in baseline or row.get("status") != "ok":
+            continue
+        origin = location_key.get(row["origin_location"])
+        destination = location_key.get(row["destination_location"])
+        if origin and destination and origin != destination:
+            samples.append((origin, destination, row, row["duration_seconds"] / baseline[row["route_id"]] - 1))
+    return samples
+
+
 def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_dir: Path, generated_at: str) -> dict:
     """Per start town, destination and half hour: how congested trips usually are, and how long they take.
 
     Morning measurements run home town -> employment area, evening ones the other way,
     so a town is a start point for both. Corridor business parks (random-only) are
-    destinations in their own right; everything else is aggregated per town.
+    destinations in their own right; everything else is aggregated per town. Google Maps
+    trips join per municipality, measured against their route's own fastest times.
     """
     anchors = yaml.safe_load((config_dir / "commute_anchors.yaml").read_text(encoding="utf-8"))
     areas = catalogue["areas"]
@@ -145,8 +199,17 @@ def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_di
     places = {key: {"name": (f"{areas[key.split('.')[0]]['name']} · {park_names[key]}" if "." in key else areas[key]["name"]),
                     "point": [round(sum(p[0] for p in pts) / len(pts), 5), round(sum(p[1] for p in pts) / len(pts), 5)]}
               for key, pts in points.items()}
-    origins = sorted({r["home_area"] for r in routes}, key=lambda key: places[key]["name"])
+    location_key, municipality_places = _municipality_places(config_dir)
+    google = _google_samples(travel, location_key)
+    for origin, destination, _, _ in google:
+        for key in (origin, destination):
+            if key not in places:
+                places[key] = {**municipality_places[key], **({"name": areas[key]["name"]} if key in areas else {})}
+    origins = sorted({r["home_area"] for r in routes} | {origin for origin, _, _, _ in google},
+                     key=lambda key: places[key]["name"])
     destinations: dict[str, set] = defaultdict(set)
+    for origin, destination, _, _ in google:
+        destinations[origin].add(destination)
     for route in routes:
         destinations[route["home_area"]].add(work_key[route["id"]])
         if work_key[route["id"]] in origins:
@@ -165,6 +228,10 @@ def build_map(routes: list[dict], catalogue: dict, travel: list[dict], config_di
         if origin in origins:
             samples[origin, destination, bucket].append(
                 (row["duration_seconds"] / row["freeflow_seconds"] - 1, row["duration_seconds"] / 60))
+    for origin, destination, row, share in google:
+        bucket = _bucket(row["observed_at"])
+        if bucket is not None:
+            samples[origin, destination, bucket].append((share, row["duration_seconds"] / 60))
     stats: dict[str, dict] = defaultdict(lambda: defaultdict(dict))
     for (origin, destination, bucket), values in samples.items():
         # [measurements, median congestion share, median travel time in whole minutes]

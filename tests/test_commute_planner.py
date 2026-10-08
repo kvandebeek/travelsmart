@@ -195,6 +195,30 @@ def test_map_summary_uses_both_directions():
     assert "brussels" in data["destinations"]["diepenbeek"] and "diepenbeek" in data["destinations"]["brussels"]
 
 
+
+def test_map_summary_places_google_trips_by_municipality():
+    import csv
+    from travelsmart.commute_export import build_map
+    routes = list(csv.DictReader((ROOT / "config" / "commute_routes.csv").open(encoding="utf-8")))
+    catalogue = yaml.safe_load((ROOT / "config" / "commute_catalogue.yaml").read_text(encoding="utf-8"))
+    def row(route, origin, destination, hour, minutes):
+        return {"provider": "google_maps", "route_id": route, "direction": "direct", "status": "ok",
+                "duration_seconds": minutes * 60, "freeflow_seconds": None,
+                "origin_location": origin, "destination_location": destination,
+                "observed_at": f"2026-10-08T{hour - 2:02d}:10:00+00:00"}
+    # Hasselt -> Tongeren: 20 minutes on quiet runs, so 30 minutes at 08:00 is 50% over its empty-road time.
+    quiet = [row("google:a", "Hasselt, Belgium", "Tongeren, Belgium", 6, 20) for _ in range(9)]
+    busy = [row("google:a", "Hasselt, Belgium", "Tongeren, Belgium", 8, 30) for _ in range(3)]
+    # Only 9 measurements: no reliable empty-road time yet, so this route stays off the map.
+    short = [row("google:b", "Hasselt, Belgium", "Pelt, Belgium", 8, 30) for _ in range(9)]
+    data = build_map(routes, catalogue, quiet + busy + short, ROOT / "config", "now")
+    tongeren = "nis_73111"                     # Tongeren-Borgloon, not a catalogue town
+    assert data["stats"]["hasselt"][tongeren]["08:00"] == [3, 0.5, 30]
+    assert data["stats"]["hasselt"][tongeren]["06:00"] == [9, 0.0, 20]
+    assert data["places"][tongeren]["name"] == "Tongeren-Borgloon"
+    assert tongeren in data["destinations"]["hasselt"]       # joins the commute town's own entry
+    assert "nis_72043" not in data["places"]                 # Pelt
+
 def test_corridors_every_regular_slot_both_directions_within_budget():
     schedule, routes = load_plan_inputs()
     polls = plan_month(2026, 10, schedule, routes)

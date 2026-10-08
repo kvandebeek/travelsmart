@@ -1,20 +1,5 @@
 <div align="center">
 
-# 🚗 TravelSmart Belgium
-
-### *When is the best moment to leave?*
-**Real commutes across Belgium, measured live every working day, joined with weather, school holidays, daylight and roadworks.**
-
-[![Commute observations](https://github.com/kvandebeek/travelsmart/actions/workflows/commutes.yml/badge.svg)](https://github.com/kvandebeek/travelsmart/actions/workflows/commutes.yml)
-![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
-![Runs on GitHub Actions](https://img.shields.io/badge/runs%20on-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
-![Open data](https://img.shields.io/badge/data-open%20%26%20free-2ea44f)
-![No build step](https://img.shields.io/badge/dashboard-zero%20build%20step-ff69b4)
-
-### [📊 Open the live dashboard →](https://kvandebeek.github.io/travelsmart/commutes.html)
-
-</div>
-
 ---
 
 ## 💡 The idea
@@ -56,14 +41,14 @@ flowchart LR
 
 ## ✨ What every measurement carries
 
-| | |
-|---|---|
-| 🚦 **Live traffic** | Travel time, distance and traffic delay, requested at the moment of departure |
-| 🌦️ **Weather** | Rain, temperature and wind at the start when leaving and at the destination on arrival |
-| 🏫 **School calendar** | Flemish *and* French Community school days. Brussels traffic feels both |
-| 🌗 **Daylight** | Daylight, twilight or dark at departure and arrival |
-| 🚧 **Road events** | Live Flemish jams, accidents, roadworks and lane closures along the actual route |
-| 🕒 **Honest timestamps** | Stamped with the real request time. A late run is stored as late; a missed slot stays missing. Nothing is backfilled |
+|                               |                                                                                                                      |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| 🚦**Live traffic**      | Travel time, distance and traffic delay, requested at the moment of departure                                        |
+| 🌦️**Weather**         | Rain, temperature and wind at the start when leaving and at the destination on arrival                               |
+| 🏫**School calendar**   | Flemish*and* French Community school days. Brussels traffic feels both                                             |
+| 🌗**Daylight**          | Daylight, twilight or dark at departure and arrival                                                                  |
+| 🚧**Road events**       | Live Flemish jams, accidents, roadworks and lane closures along the actual route                                     |
+| 🕒**Honest timestamps** | Stamped with the real request time. A late run is stored as late; a missed slot stays missing. Nothing is backfilled |
 
 ## 🧭 How it runs
 
@@ -116,7 +101,7 @@ python -m http.server --directory public 8080            # http://localhost:8080
 
 ### Local Google Maps travel times
 
-This separate runner opens the Google Maps website in a visible local Chromium browser. It uses no Maps API key and does not feed the dashboard. On first run, handle any Google consent screen in the browser window; the runner keeps that browser profile in `data/google_maps_profile/`.
+This separate runner opens the Google Maps website in a hidden (headless) local Chromium browser; add `--no-headless` to watch it. It uses no Maps API key and does not feed the dashboard. When Google shows its consent screen, the runner clicks **Reject all**; travel times load the same way. If it cannot find that button, the capture is saved as `consent_required`; with `--no-headless` it instead waits up to 3 minutes for you to choose in the browser window. The runner keeps that browser profile, and the choice, in `data/google_maps_profile/`.
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -e '.[google-maps-capture]'
@@ -146,7 +131,7 @@ The separate stretch runner measures only adjacent points in each corridor, in b
 .\.venv\Scripts\python.exe scripts\collect_google_maps_stretches.py --corridor liege_oostende --direction forward --once
 ```
 
-The full set has 138 directed leg checks and at least 2 minutes of 1-second pauses, plus page loading and settling time. All selected legs are shuffled each sweep, including legs within a corridor. Results go to `data/google_maps_stretches/captures.jsonl`; each row includes its corridor, direction, original leg index, shared endpoint IDs, time, duration, and distance. `summaries.jsonl` has one row per corridor and direction, including the sum of leg times and the span between its first and last measurement. Incomplete corridors have no sum. Some extra points use place names rather than coordinate pins, so check their resolved locations before treating sums as precise road measurements. The runner uses a separate visible browser profile, so its first run may show Google's consent screen. Omit `--once` to repeat sweeps.
+The full set has 138 directed leg checks and at least 2 minutes of 1-second pauses, plus page loading and settling time. All selected legs are shuffled each sweep, including legs within a corridor. Results go to `data/google_maps_stretches/captures.jsonl`; each row includes its corridor, direction, original leg index, shared endpoint IDs, time, duration, and distance. `summaries.jsonl` has one row per corridor and direction, including the sum of leg times and the span between its first and last measurement. Incomplete corridors have no sum. Some extra points use place names rather than coordinate pins, so check their resolved locations before treating sums as precise road measurements. The runner uses a separate headless browser profile, so its first run clicks **Reject all** on Google's consent screen. Omit `--once` to repeat sweeps.
 
 Different corridor selections can run in parallel: each selection and direction now gets its own capture folder and browser profile. For example, start these in separate PowerShell windows:
 
@@ -161,7 +146,7 @@ Adding adjacent leg times estimates a **journey through those exact listed point
 
 ### Belgian municipality list and directional pairs
 
-`config/belgian_municipalities.csv` contains all 565 Belgian municipalities from [Statbel's REFNIS register](https://statbel.fgov.be/en/open-data/code-refnis-0), with their official NIS codes and French and Dutch names. `scripts/build_belgian_municipalities.py` refreshes the list from the published CSV. These are municipalities, not every village or neighborhood. Their `location` values are place-name queries; unlike the 18 strategic points, they are not verified road pins.
+`config/belgian_municipalities.csv` contains all 565 Belgian municipalities from [Statbel&#39;s REFNIS register](https://statbel.fgov.be/en/open-data/code-refnis-0), with their official NIS codes and French and Dutch names. `scripts/build_belgian_municipalities.py` refreshes the list from the published CSV. These are municipalities, not every village or neighborhood. Their `location` values are place-name queries; unlike the 18 strategic points, they are not verified road pins.
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\plan_belgian_city_pairs.py --dry-run
@@ -176,7 +161,7 @@ The pair planner writes `data/belgian_city_pairs.csv`: 318,660 rows, one for eve
 
 The default `--batch-order random` uses seed 42 to spread each batch across the whole pair list, then reshuffles that batch's collection order on every sweep. Use the same seed and nonoverlapping `--batch-start` ranges for parallel batches; their routes will not overlap. `global_pair_index` still identifies each route's position in the original pair list. Change the assignment with `--batch-seed`, or use `--batch-order sequential` to recover the previous contiguous batches. Keep the municipality CSV unchanged while working through a set of batches.
 
-Each random batch gets its own browser profile and output folder, such as `data/google_maps_belgian_municipalities_batch_0_20_random_42_profile/` and `data/google_maps_belgian_municipalities_batch_0_20_random_42_captures/`. This separates new random batches from any earlier sequential batch results. Different batches can run alongside the 18-point sweep. The first run of each new profile may need a Google consent choice in its visible browser window. Starting the **same** batch twice still shares its profile; use a distinct `--profile-dir` for that case.
+Each random batch gets its own browser profile and output folder, such as `data/google_maps_belgian_municipalities_batch_0_20_random_42_profile/` and `data/google_maps_belgian_municipalities_batch_0_20_random_42_captures/`. This separates new random batches from any earlier sequential batch results. Different batches can run alongside the 18-point sweep. The first run of each new profile clicks **Reject all** on Google's consent screen. Starting the **same** batch twice still shares its profile; use a distinct `--profile-dir` for that case.
 
 A full direct sweep would need about 3.7 days of 1-second pauses alone, plus settling and page loading, so the pair plan is primarily an inventory for staged work or offline route estimation. Google's [Maps terms](https://www.google.com/help/terms_maps/) restrict mass downloading and bulk feeds; a delay does not grant permission for bulk collection.
 
@@ -227,6 +212,7 @@ scripts/                   catalogue builders, planner, collector, exports
 observations/              measurements, committed by the workflow
 public/                    dashboards
 ```
+
 </details>
 
 <details>
@@ -241,19 +227,20 @@ uvicorn travelsmart.main:app --reload                           # API at /docs
 ```
 
 OSRM has no live traffic. It is close to reality on rural roads but optimistic in city centres, so treat it as a baseline, not a commute time.
+
 </details>
 
 ## 🙏 Data and attribution
 
-| Source | Used for | Terms |
-|---|---|---|
-| [TomTom Routing API](https://developer.tomtom.com/routing-api/documentation) | Live commute times | Free tier |
-| [HERE Routing v8](https://www.here.com/docs/bundle/routing-api-developer-guide-v8/page/README.html) | Cross-check sample | Free tier |
-| [Statbel](https://statbel.fgov.be/en/open-data) | Population per statistical sector → neighbourhoods | Open data licence |
-| [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api) | Weather | CC BY 4.0 |
-| [Vlaams Verkeerscentrum DATEX II](https://www.verkeerscentrum.be/) | Road events | CC BY. © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum |
-| [MIV open data](https://miv-opendata.belfla.be/) | Loop-detector speeds | Open data |
-| [OpenStreetMap](https://www.openstreetmap.org/copyright) via OSRM and Nominatim | Road snapping, road distances, baseline | ODbL |
+| Source                                                                                             | Used for                                            | Terms                                                           |
+| -------------------------------------------------------------------------------------------------- | --------------------------------------------------- | --------------------------------------------------------------- |
+| [TomTom Routing API](https://developer.tomtom.com/routing-api/documentation)                        | Live commute times                                  | Free tier                                                       |
+| [HERE Routing v8](https://www.here.com/docs/bundle/routing-api-developer-guide-v8/page/README.html) | Cross-check sample                                  | Free tier                                                       |
+| [Statbel](https://statbel.fgov.be/en/open-data)                                                     | Population per statistical sector → neighbourhoods | Open data licence                                               |
+| [Open-Meteo](https://open-meteo.com/en/docs/historical-weather-api)                                 | Weather                                             | CC BY 4.0                                                       |
+| [Vlaams Verkeerscentrum DATEX II](https://www.verkeerscentrum.be/)                                  | Road events                                         | CC BY. © Agentschap Wegen en Verkeer – Vlaams Verkeerscentrum |
+| [MIV open data](https://miv-opendata.belfla.be/)                                                    | Loop-detector speeds                                | Open data                                                       |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) via OSRM and Nominatim                     | Road snapping, road distances, baseline             | ODbL                                                            |
 
 Raw provider responses are never stored. Only travel time, distance and delay are kept, together with the moment each was measured.
 

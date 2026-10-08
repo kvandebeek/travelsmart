@@ -31,6 +31,9 @@ TRAVEL_TIME = re.compile(
     re.IGNORECASE,
 )
 DISTANCE_KM = re.compile(r"(\d+(?:[.,]\d+)?)\s*km\b", re.IGNORECASE)
+# Google's consent page button; English first, with the Belgian languages as fallbacks.
+CONSENT_BUTTON = re.compile(r"^\s*(?:reject all|alles afwijzen|tout refuser|alle ablehnen)\s*$",
+                            re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -116,9 +119,20 @@ def duration_minutes(value: str) -> int:
     return (int(hours.group(1)) * 60 if hours else 0) + (int(minutes.group(1)) if minutes else 0)
 
 
+def dismiss_consent(page) -> bool:
+    """Click "Reject all" on Google's consent page; the profile remembers the choice."""
+    try:
+        page.get_by_role("button", name=CONSENT_BUTTON).first.click(timeout=10000)
+        page.wait_for_url(lambda url: "consent.google.com" not in url, timeout=15000)
+    except PlaywrightError:
+        return False
+    return True
+
+
 def wait_for_route(page, timeout_seconds: int, *, headed: bool) -> str | None:
-    if "consent.google.com" in page.url and headed:
-        print("Google consent is open. Choose an option in the browser window to continue.", flush=True)
+    if "consent.google.com" in page.url and not dismiss_consent(page) and headed:
+        print("Could not dismiss Google consent automatically. "
+              "Choose an option in the browser window to continue.", flush=True)
         consent_deadline = time.monotonic() + 180
         while "consent.google.com" in page.url and time.monotonic() < consent_deadline:
             page.wait_for_timeout(1000)
@@ -227,7 +241,8 @@ def main() -> int:
     parser.add_argument("--once", action="store_true", help="Run one full sweep and exit")
     parser.add_argument("--dry-run", action="store_true", help="Show route count without opening a browser")
     parser.add_argument("--screenshots", action="store_true", help="Also save labeled PNGs")
-    parser.add_argument("--headless", action="store_true", help="Hide the browser window")
+    parser.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True,
+                        help="Hide the browser window (default); --no-headless shows it")
     parser.add_argument("--timeout-seconds", type=int, default=45, help="Wait for route to appear (default: 45)")
     parser.add_argument("--output-dir", type=Path, help="Observation folder; defaults to one per point list")
     parser.add_argument("--profile-dir", type=Path, help="Browser profile; defaults to one per point list")

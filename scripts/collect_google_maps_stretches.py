@@ -137,7 +137,8 @@ def main() -> int:
     parser.add_argument("--once", action="store_true", help="Run one full sweep and exit")
     parser.add_argument("--dry-run", action="store_true", help="Show planned checks without opening a browser")
     parser.add_argument("--screenshots", action="store_true", help="Also save labeled PNGs")
-    parser.add_argument("--headless", action="store_true", help="Hide the browser window")
+    parser.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True,
+                        help="Hide the browser window (default); --no-headless shows it")
     parser.add_argument("--output-dir", type=Path, help="Capture folder; defaults to one per selection")
     parser.add_argument("--profile-dir", type=Path, help="Browser profile; defaults to one per selection")
     args = parser.parse_args()

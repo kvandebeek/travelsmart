@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TravelSmart — when to leave</title>
+<style>
+  :root {
+    --bg: #11141a; --panel: #181c24; --line: #262c38; --text: #e7ecf3; --muted: #93a0b4;
+    --accent: #5aa9e6; --good: #3fb27f; --bad: #d4574e;
+  }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f6f7f9; --panel: #fff; --line: #dfe3ea; --text: #1a1f29; --muted: #5d6a7e; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; }
+  header { padding: 20px 24px 8px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.lede { margin: 0; color: var(--muted); }
+  main { display: grid; grid-template-columns: minmax(260px, 380px) 1fr; gap: 20px; padding: 16px 24px 32px; }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  svg { width: 100%; height: auto; display: block; cursor: crosshair; }
+  .dot { fill: var(--muted); opacity: .35; }
+  .pick { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+  .route { stroke: var(--accent); stroke-width: 2; fill: none; opacity: .9; }
+  table { border-collapse: collapse; font-size: 11px; }
+  td.cell { width: 13px; height: 16px; padding: 0; }
+  th { font-weight: 500; color: var(--muted); font-size: 11px; text-align: right; padding-right: 6px; white-space: nowrap; }
+  th.hour { text-align: left; font-weight: 400; }
+  .status { color: var(--muted); margin: 10px 0 0; }
+  .legend { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; margin-top: 10px; }
+  .swatch { width: 14px; height: 12px; border-radius: 2px; }
+  button { background: var(--accent); color: #06121c; border: 0; border-radius: 6px; padding: 7px 12px;
+           font: inherit; font-weight: 600; cursor: pointer; }
+  button[disabled] { opacity: .5; cursor: default; }
+  code { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>When should I leave?</h1>
+  <p class="lede">Click the map twice: once for where you start, once for where you are going.</p>
+</header>
+<main>
+  <section class="panel">
+    <svg id="map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" aria-label="Belgian road network"></svg>
+    <p class="status" id="picks">Loading the network…</p>
+    <button id="reset" disabled>Start again</button>
+  </section>
+  <section class="panel">
+    <div id="heatmap"></div>
+    <p class="status" id="summary"></p>
+    <div class="legend">
+      <span>quicker</span><span class="swatch" style="background:#3fb27f"></span>
+      <span class="swatch" style="background:#d9c35a"></span>
+      <span class="swatch" style="background:#d4574e"></span><span>slower</span>
+    </div>
+  </section>
+</main>
+<script>
+const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const HALF_HOURS = 48, WEEKDAYS = 7;
+let graph = null, profiles = null, picks = [], bounds = null;
+
+const el = (id) => document.getElementById(id);
+
+async function load() {
+  const [g, p] = await Promise.all([
+    fetch("data/graph.json").then(r => r.json()),
+    fetch("data/profiles.json").then(r => r.json()).catch(() => ({})),
+  ]);
+  graph = g;
+  profiles = p || {};
+  graph.out = new Map();
+  graph.edges.forEach((edge, index) => {
+    if (!graph.out.has(edge[0])) graph.out.set(edge[0], []);
+    graph.out.get(edge[0]).push(index);
+  });
+  drawMap();
+  el("picks").textContent = `${graph.nodes.length.toLocaleString()} junctions, ` +
+    `${graph.edges.length.toLocaleString()} stretches, ` +
+    `${Object.keys(profiles).length.toLocaleString()} of them measured so far.`;
+}
+
+// A plain equirectangular projection: over one country the distortion is invisible.
+function project([lat, lon]) {
+  const x = (lon - bounds.west) / (bounds.east - bounds.west) * 100;
+  const y = (bounds.north - lat) / (bounds.north - bounds.south) * 100;
+  return [x, y];
+}
+
+function drawMap() {
+  const lats = graph.nodes.map(n => n[0]), lons = graph.nodes.map(n => n[1]);
+  bounds = { south: Math.min(...lats), north: Math.max(...lats),
+             west: Math.min(...lons), east: Math.max(...lons) };
+  const aspect = (bounds.north - bounds.south) * 111 / ((bounds.east - bounds.west) * 70);
+  const map = el("map");
+  map.setAttribute("viewBox", `0 0 100 ${(100 * aspect).toFixed(1)}`);
+  const dots = graph.nodes.map(node => {
+    const [x, y] = project(node);
+    return `<circle class="dot" cx="${x.toFixed(2)}" cy="${(y * aspect).toFixed(2)}" r="0.22"/>`;
+  }).join("");
+  map.innerHTML = `<g id="dots">${dots}</g><g id="marks"></g>`;
+  map.onclick = (event) => onPick(event, aspect);
+}
+
+function onPick(event, aspect) {
+  const box = el("map").getBoundingClientRect();
+  const x = (event.clientX - box.left) / box.width * 100;
+  const y = (event.clientY - box.top) / box.height * 100 / aspect;
+  let best = -1, bestDistance = Infinity;
+  graph.nodes.forEach((node, index) => {
+    const [nx, ny] = project(node);
+    const distance = (nx - x) ** 2 + (ny - y) ** 2;
+    if (distance < bestDistance) { bestDistance = distance; best = index; }
+  });
+  if (best < 0) return;
+  if (picks.length >= 2) picks = [];
+  picks.push(best);
+  drawPicks(aspect);
+  el("reset").disabled = picks.length === 0;
+  if (picks.length === 2) plan();
+  else el("picks").textContent = "Now click where you are going.";
+}
+
+function drawPicks(aspect) {
+  el("marks").innerHTML = picks.map(index => {
+    const [x, y] = project(graph.nodes[index]);
+    return `<circle class="pick" cx="${x.toFixed(2)}" cy="${(y * aspect).toFixed(2)}" r="1.1"/>`;
+  }).join("");
+}
+
+function freeFlowSeconds(edge) {
+  const kmh = graph.freeFlowKmh[edge[3]] || 50;
+  return edge[2] / (kmh / 3.6);
+}
+
+// A cell holds the median for the half hour it starts, so a moment between two cells is read
+// between them: crossing 08:29 into 08:30 should be gradual, not a step.
+function edgeSeconds(edgeIndex, minute) {
+  const edge = graph.edges[edgeIndex];
+  const profile = profiles[graph.edgeIds[edgeIndex]];
+  if (!profile || !profile.cells) return [freeFlowSeconds(edge), false];
+  const week = ((minute % (WEEKDAYS * 1440)) + WEEKDAYS * 1440) % (WEEKDAYS * 1440);
+  const weekday = Math.floor(week / 1440), minuteOfDay = week % 1440;
+  const position = minuteOfDay / 30, first = Math.floor(position), share = position - first;
+  const before = cellValue(profile, weekday, first), after = cellValue(profile, weekday, first + 1);
+  if (before === null && after === null) return [freeFlowSeconds(edge), false];
+  if (before === null) return [after, true];
+  if (after === null) return [before, true];
+  return [before + (after - before) * share, true];
+}
+
+function cellValue(profile, weekday, halfHour) {
+  const day = (weekday + Math.floor(halfHour / HALF_HOURS) + WEEKDAYS) % WEEKDAYS;
+  const half = ((halfHour % HALF_HOURS) + HALF_HOURS) % HALF_HOURS;
+  const exact = profile.cells[`${day}:${half}`];
+  if (exact !== undefined) return exact;
+  // The same half hour on another day, then the edge's usual time.
+  for (let other = 0; other < WEEKDAYS; other++) {
+    const value = profile.cells[`${other}:${half}`];
+    if (value !== undefined) return value;
+  }
+  return profile.usual || null;
+}
+
+function fastest(start, end, departureMinute) {
+  if (start === end) return { seconds: 0, edges: [], measured: 0 };
+  const best = new Map([[start, 0]]);
+  const previous = new Map();
+  // A small binary heap; a plain sort on every push is far too slow over fourteen thousand edges.
+  const heap = [[0, start]];
+  const push = (item) => {
+    heap.push(item);
+    let i = heap.length - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (heap[parent][0] <= heap[i][0]) break;
+      [heap[parent], heap[i]] = [heap[i], heap[parent]]; i = parent;
+    }
+  };
+  const pop = () => {
+    const top = heap[0], last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      let i = 0;
+      for (;;) {
+        const left = 2 * i + 1, right = left + 1;
+        let smallest = i;
+        if (left < heap.length && heap[left][0] < heap[smallest][0]) smallest = left;
+        if (right < heap.length && heap[right][0] < heap[smallest][0]) smallest = right;
+        if (smallest === i) break;
+        [heap[smallest], heap[i]] = [heap[i], heap[smallest]]; i = smallest;
+      }
+    }
+    return top;
+  };
+  while (heap.length) {
+    const [elapsed, node] = pop();
+    if (elapsed > (best.get(node) ?? Infinity)) continue;
+    if (node === end) return rebuild(previous, start, end, elapsed);
+    const minute = departureMinute + Math.floor(elapsed / 60);
+    for (const edgeIndex of graph.out.get(node) || []) {
+      const [seconds, measured] = edgeSeconds(edgeIndex, minute);
+      const arrival = elapsed + seconds, next = graph.edges[edgeIndex][1];
+      if (arrival < (best.get(next) ?? Infinity)) {
+        best.set(next, arrival);
+        previous.set(next, [node, edgeIndex, measured]);
+        push([arrival, next]);
+      }
+    }
+  }
+  return null;
+}
+
+function rebuild(previous, start, end, seconds) {
+  const edges = [];
+  let measured = 0, node = end;
+  while (node !== start) {
+    const step = previous.get(node);
+    if (!step) break;
+    edges.push(step[1]);
+    if (step[2]) measured++;
+    node = step[0];
+  }
+  return { seconds, edges: edges.reverse(), measured };
+}
+
+function plan() {
+  el("picks").textContent = "Working out the week…";
+  setTimeout(() => {
+    const [start, end] = picks;
+    const grid = [], shares = [];
+    for (let weekday = 0; weekday < WEEKDAYS; weekday++) {
+      const row = [];
+      for (let half = 0; half < HALF_HOURS; half++) {
+        const route = fastest(start, end, weekday * 1440 + half * 30);
+        row.push(route ? route.seconds : null);
+        if (route && route.edges.length) shares.push(route.measured / route.edges.length);
+      }
+      grid.push(row);
+    }
+    render(grid, shares);
+  }, 20);
+}
+
+function render(grid, shares) {
+  const values = grid.flat().filter(v => v !== null);
+  if (!values.length) {
+    el("picks").textContent = "No road route between those two points.";
+    el("heatmap").innerHTML = "";
+    return;
+  }
+  const quickest = Math.min(...values), slowest = Math.max(...values);
+  let html = "<table><tr><th></th>";
+  for (let hour = 0; hour < 24; hour++) html += `<th class="hour" colspan="2">${hour}</th>`;
+  html += "</tr>";
+  grid.forEach((row, weekday) => {
+    html += `<tr><th>${DAYS[weekday]}</th>`;
+    row.forEach((value, half) => {
+      const title = value === null ? "no route"
+        : `${DAYS[weekday]} ${String(Math.floor(half / 2)).padStart(2, "0")}:${half % 2 ? "30" : "00"} — ${Math.round(value / 60)} min`;
+      html += `<td class="cell" style="background:${colour(value, quickest, slowest)}" title="${title}"></td>`;
+    });
+    html += "</tr>";
+  });
+  html += "</table>";
+  el("heatmap").innerHTML = html;
+
+  const share = shares.length ? shares.reduce((a, b) => a + b, 0) / shares.length : 0;
+  const best = [];
+  grid.forEach((row, weekday) => row.forEach((value, half) => {
+    if (value !== null && value <= quickest * 1.05) best.push([weekday, half]);
+  }));
+  el("picks").textContent = `Fastest ${Math.round(quickest / 60)} min, slowest ${Math.round(slowest / 60)} min.`;
+  el("summary").innerHTML = share > 0.001
+    ? `${best.length} half hours are within 5% of the best. ` +
+      `<code>${Math.round(share * 100)}%</code> of this route rests on real measurements; the rest is free flow.`
+    : `${best.length} half hours are within 5% of the best. None of this route has been measured yet, ` +
+      `so every half hour looks the same: the times are free-flow estimates from the road type.`;
+}
+
+function colour(value, quickest, slowest) {
+  if (value === null) return "transparent";
+  const share = slowest > quickest ? (value - quickest) / (slowest - quickest) : 0;
+  const hue = 145 - share * 145;         // green through yellow to red
+  return `hsl(${hue} 55% ${share > 0.75 ? 48 : 42}%)`;
+}
+
+el("reset").onclick = () => {
+  picks = [];
+  el("marks").innerHTML = "";
+  el("heatmap").innerHTML = "";
+  el("summary").textContent = "";
+  el("picks").textContent = "Click the map where you start.";
+  el("reset").disabled = true;
+};
+
+load().catch(error => { el("picks").textContent = `Could not load the network: ${error}`; });
+</script>
+</body>
+</html>

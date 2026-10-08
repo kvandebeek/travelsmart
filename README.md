@@ -29,10 +29,15 @@ The project is being rebuilt around that network. **[docs/network-design.md](doc
 
 What works today:
 
-- **Phase 1 network builder**: reads a local Geofabrik Belgium OpenStreetMap extract and builds a directed road graph with a browser review map.
-- **Google Maps browser collector**: `scripts/collect_google_maps.py` reads every route option Google lists (time, distance, road and traffic note) in a headless browser. It is the engine the new edge collector will build on.
+- **Phase 1 network builder**: reads a local Geofabrik Belgium OpenStreetMap extract and builds a directed road graph with a browser review map, plus an automated topology audit.
+- **Phase 2 endpoints**: `scripts/build_endpoints.py` turns the OpenStreetMap extract and the SNCB feed into 14,137 places (stations, schools, hospitals, government, park-and-ride, business parks, airports, retail) grouped into 4,098 clusters, each hanging off the network through access edges along real roads.
+- **Phase 3 collectors**: `scripts/build_chains.py` cuts the network into provider-sized chains, `scripts/measure_chains.py` measures them with TomTom or HERE, `scripts/measure_edges_google.py` measures single edges in a browser, and `scripts/run_measure_scheduler.py` runs the lot around the clock inside each provider's free tier. Every measurement is checked against the edge it was asked for before it is stored.
+- **Phase 4 profiles and routing**: `scripts/build_profiles.py` turns the raw legs into a 7 x 48 profile per edge, and `scripts/plan_trip.py` answers "when should I leave?" with a week-shaped heatmap.
+- **Google Maps browser collector**: `scripts/collect_google_maps.py` reads every route option Google lists (time, distance, road and traffic note) in a headless browser. It is the engine the edge collector builds on.
 - **Capture import**: `scripts/import_google_maps_captures.py` merges local captures into one observation file with each route's road numbers and alternatives.
 - **Open-data feeds and the OSRM baseline** (below).
+
+Measuring needs provider keys in a local `.env` (`TOMTOM_API_KEY`, `TOMTOM_API_KEY2`, `HERE_api_key`); it is never committed. `scripts/measure_status.py` reports what has been gathered and what is left of each budget.
 
 ## 🚀 Run it yourself
 

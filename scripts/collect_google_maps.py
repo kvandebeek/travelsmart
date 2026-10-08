@@ -168,6 +168,15 @@ def add_capture_label(page, label: str) -> None:
     )
 
 
+def fresh_page(context, page):
+    """Swap in a new tab before each route. With some profiles Chromium keeps one renderer process
+    alive per Google Maps visit in a reused tab (about 100 MB each), until the machine runs out of
+    memory; closing the tab releases them."""
+    fresh = context.new_page()
+    page.close()
+    return fresh
+
+
 def capture(page, *, origin: Point, destination: Point, output_dir: Path,
             timeout_seconds: int, headed: bool, settle_seconds: float,
             screenshots: bool, sweep_id: str, pair_index: int, pair_count: int,
@@ -308,6 +317,7 @@ def main() -> int:
                     if index:
                         time.sleep(args.delay_seconds + random.uniform(0, args.jitter_seconds))
                     try:
+                        page = fresh_page(context, page)
                         record = capture(page, origin=origin, destination=destination,
                                          output_dir=args.output_dir, timeout_seconds=args.timeout_seconds,
                                          headed=not args.headless, settle_seconds=args.settle_seconds,

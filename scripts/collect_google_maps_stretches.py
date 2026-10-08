@@ -17,7 +17,7 @@ import yaml
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import sync_playwright
 
-from collect_google_maps import LOCAL_TIMEZONE, ROOT, Point, capture, load_points
+from collect_google_maps import LOCAL_TIMEZONE, ROOT, Point, capture, fresh_page, load_points
 
 
 @dataclass(frozen=True)
@@ -215,6 +215,7 @@ def main() -> int:
                         time.sleep(args.delay_seconds + random.uniform(0, args.jitter_seconds))
                     key = (corridor_id, direction)
                     try:
+                        page = fresh_page(context, page)
                         record = capture(
                             page, origin=leg.origin, destination=leg.destination,
                             output_dir=args.output_dir, timeout_seconds=args.timeout_seconds,

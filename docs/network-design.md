@@ -1,8 +1,13 @@
 # TravelSmart network design
 
 Status: phase 1 builder, automated topology audit and local review map built, 8 October 2026. The
-old commute routes, corridors and their data were removed on the same day to start fresh. The audit
-has found missing links that must be fixed before the graph is used for measurements.
+old commute routes, corridors and their data were removed on the same day to start fresh. The audit's
+systemic findings were fixed on 9 October 2026: unnumbered carriageways paired with a numbered road
+were being dropped, and backbone roads outside the N/R numbering (Brussels B-roads, A-roads and
+E-route carriageways at interchanges) were not recognised at all. What the audit still reports is
+either a genuine OpenStreetMap source gap to edit upstream, or a deliberate limit of the compact
+graph (exit access stops after two hops of ordinary local street). Phase 2 has started: stations are
+loaded as endpoint clusters with access edges.
 
 ## 1. Goal
 
@@ -100,8 +105,8 @@ the data.
 | Regional-road + length split nodes | 1,453 + 1,493 |
 | Backbone + transfer edges (directed) | 1,220 motorway + 8,879 regional + 341 transfer |
 | Ramp and shared-junction edges (directed) | 1,354 on + 1,541 off + 538 ramp links + 66 zero-distance junction turns |
-| Endpoint clusters (phase 2) | ~1,500–3,000 |
-| Access edges (phase 2) | Not built yet |
+| Endpoint clusters (phase 2) | 505 for stations; ~1,500–3,000 once every category is loaded |
+| Access edges (phase 2, directed) | 1,647 for stations (879 along roads, 768 still estimated by distance) |
 
 The builder includes the shortest legal local road paths found within 15 km in both directions
 between motorway exits and the N1–N99/R1–R99 backbone. Exact OSM junctions remain separate so

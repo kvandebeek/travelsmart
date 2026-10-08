@@ -1,7 +1,5 @@
 import json
 
-from travelsmart.commute_export import export_commutes
-from travelsmart.config import ROOT
 from travelsmart.google_maps_import import import_captures
 
 
@@ -11,7 +9,7 @@ def _capture(moment: str, origin: str, destination: str, minutes: int) -> dict:
             "travel_time_minutes": minutes, "distance_km": 12.4, "status": "ok"}
 
 
-def test_import_is_repeatable_and_export_uses_google_observations(tmp_path):
+def test_import_is_repeatable(tmp_path):
     source = tmp_path / "data"
     first = source / "google_maps_a_captures" / "captures.jsonl"
     second = source / "google_maps_b_captures" / "captures.jsonl"
@@ -31,16 +29,6 @@ def test_import_is_repeatable_and_export_uses_google_observations(tmp_path):
     assert {row["duration_seconds"] for row in rows} == {2100, 2280}
     assert {row["distance_m"] for row in rows} == {12400}
     assert all(row["freeflow_seconds"] is None for row in rows)
-
-    public = tmp_path / "public"
-    result = export_commutes(config_dir=ROOT / "config", data_dir=observations, output_dir=public)
-    month = json.loads((public / "2026-10.json").read_text(encoding="utf-8"))
-    index = json.loads((public / "index.json").read_text(encoding="utf-8"))
-    latest = json.loads((public / "latest.json").read_text(encoding="utf-8"))
-    assert result["google_routes"] == 2
-    assert {row["route_id"] for row in month} == {route["id"] for route in index["routes"]
-                                                 if route["tier"] == "google"}
-    assert all(row["provider"] == "google_maps" for row in latest["calls"])
 
 
 def test_cleanup_removes_only_imported_capture_folders(tmp_path):
@@ -72,3 +60,27 @@ def test_cleanup_can_keep_a_running_collector_folder(tmp_path):
                              delete_sources=True, keep_folders=(active,))
     assert result["deleted_folders"] == 1 and result["kept_folders"] == 1
     assert active.exists() and not inactive.exists()
+
+
+def test_import_keeps_every_route_option_and_backfills_roads(tmp_path):
+    source = tmp_path / "data" / "google_maps_a_captures"
+    source.mkdir(parents=True)
+    capture = _capture("2026-10-08T09:00:00+02:00", "Lokeren", "Sint-Niklaas", 24)
+    capture.update({"via": "E17", "routes": [
+        {"rank": 0, "travel_time_minutes": 24, "distance_km": 21.1, "via": "E17", "note": "Fastest route"},
+        {"rank": 1, "travel_time_minutes": 26, "distance_km": 20.2, "via": "N70", "note": None},
+        {"rank": 2, "travel_time_minutes": 27, "distance_km": 15.6, "via": "Rozenstraat/N473 and N70", "note": None}]})
+    (source / "captures.jsonl").write_text(json.dumps(capture) + "\n", encoding="utf-8")
+    target = tmp_path / "observations" / "google_maps" / "captures.jsonl"
+    # An observation imported before roads were recorded: its road comes from the stored card text.
+    old = {"capture_id": "old", "observed_at": "2026-10-08T08:00:00+02:00",
+           "route_card_text": "21 min 26.2 km via E40 Best route now due to traffic conditions Details Preview"}
+    target.parent.mkdir(parents=True)
+    target.write_text(json.dumps(old) + "\n", encoding="utf-8")
+    import_captures(source_root=tmp_path / "data", output=target)
+    rows = {row["capture_id"]: row for row in map(json.loads, target.read_text(encoding="utf-8").splitlines())}
+    assert (rows["old"]["via"], rows["old"]["roads"]) == ("E40", ["E40"])
+    new = next(row for key, row in rows.items() if key != "old")
+    assert (new["via"], new["roads"], new["duration_seconds"]) == ("E17", ["E17"], 1440)
+    assert [(a["rank"], a["roads"], a["duration_seconds"], a["distance_m"]) for a in new["alternatives"]] == [
+        (1, ["N70"], 1560, 20200), (2, ["N473", "N70"], 1620, 15600)]

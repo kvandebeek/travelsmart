@@ -1,10 +1,11 @@
-"""Import local browser captures into the shared commute observation format."""
+"""Import local Google Maps browser captures into one observation file."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 import shutil
 import tempfile
 from datetime import datetime
@@ -21,6 +22,30 @@ def capture_files(source_root: Path) -> list[Path]:
         if "captures.jsonl" in files:
             found.append(Path(folder) / "captures.jsonl")
     return sorted(found)
+
+
+# Belgian road numbers in Google's "via" text: E- and A-motorways, N-roads and R-rings.
+ROAD_CODE = re.compile(r"\b[EANR]\d{1,4}\b")
+# Older captures only kept the whole card as one line: "21 min 26.2 km via E40 Best route now ...".
+VIA_IN_CARD = re.compile(r"\bvia (.+?)(?= (?:Fastest|Best|Some|Heavy|Light|Moderate|Usual|Details|Preview)\b| \d+ (?:min|hr)\b|$)")
+
+
+def road_codes(via: str | None) -> list[str]:
+    """Road numbers in a Google "via" text, in order: "Rozenstraat/N473 and N70" -> ["N473", "N70"]."""
+    return list(dict.fromkeys(ROAD_CODE.findall(via or "")))
+
+
+def via_from_card(text: str | None) -> str | None:
+    match = VIA_IN_CARD.search(text or "")
+    return match.group(1) if match else None
+
+
+def _with_roads(row: dict) -> dict:
+    """Fill the recommended route's "via" text and road numbers on observations imported before they existed."""
+    if "via" not in row:
+        row["via"] = via_from_card(row.get("route_card_text"))
+        row["roads"] = road_codes(row["via"])
+    return row
 
 
 def _identity(value: str) -> str:
@@ -53,6 +78,8 @@ def normalize_capture(raw: dict, source_file: str) -> dict:
     if status == "ok" and (not isinstance(duration, (int, float)) or duration <= 0):
         raise ValueError("successful capture needs a positive travel_time_minutes")
     route_id = google_route_id(origin_location, destination_location)
+    options = raw.get("routes")
+    via = raw.get("via") or via_from_card(raw.get("route_card_text"))
     return {
         "provider": "google_maps", "account": None, "capture_id": capture_id,
         "route_id": route_id, "direction": "direct", "tier": "google",
@@ -67,6 +94,15 @@ def normalize_capture(raw: dict, source_file: str) -> dict:
         "origin_location": origin_location, "destination_location": destination_location,
         "travel_time_text": raw.get("travel_time_text"),
         "route_card_text": raw.get("route_card_text"),
+        # The recommended route's road, and the other routes Google listed at the same moment
+        # (None: captured before the collector read them).
+        "via": via, "roads": road_codes(via),
+        "alternatives": None if options is None else [
+            {"rank": option["rank"], "via": option.get("via"), "roads": road_codes(option.get("via")),
+             "duration_seconds": round(option["travel_time_minutes"] * 60),
+             "distance_m": round(option["distance_km"] * 1000) if option.get("distance_km") is not None else None,
+             "note": option.get("note")}
+            for option in options if option.get("rank") and option.get("travel_time_minutes")],
         "sweep_id": raw.get("sweep_id"), "pair_index": raw.get("pair_index"),
         "global_pair_index": raw.get("global_pair_index"),
         "corridor_id": raw.get("corridor_id"), "corridor_run_id": raw.get("corridor_run_id"),
@@ -111,7 +147,7 @@ def import_captures(*, source_root: Path = ROOT / "data",
                 row = json.loads(line)
                 if "capture_id" not in row:
                     raise ValueError(f"{output}:{number}: missing capture_id")
-                existing[row["capture_id"]] = row
+                existing[row["capture_id"]] = _with_roads(row)
     snapshots = {path: (path.stat().st_size, path.stat().st_mtime_ns) for path in files}
     added = 0
     for path in files:

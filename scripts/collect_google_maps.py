@@ -113,6 +113,35 @@ def visible_route_text(page) -> str | None:
     return None
 
 
+def visible_routes(page) -> list[dict]:
+    """Every route option Google lists, recommended first: rank, time, distance, "via" road and traffic note.
+
+    Each card's lines read like: "24 min", "21.1 km", "via E17", "Fastest route now due to traffic conditions".
+    """
+    routes = {}
+    cards = page.locator("[data-trip-index]")
+    for index in range(min(cards.count(), 10)):
+        card = cards.nth(index)
+        if not card.is_visible():
+            continue
+        lines = [line.strip() for line in re.sub(r"[\ue000-\uf8ff]", "", card.inner_text(timeout=3000)).splitlines()
+                 if line.strip()]
+        travel_time = next((line for line in lines if TRAVEL_TIME.fullmatch(line)), None)
+        rank = int(card.get_attribute("data-trip-index") or index)
+        if not travel_time or rank in routes:   # Google repeats card 0 as a bare "Preview" element
+            continue
+        distance = next((match for line in lines if (match := DISTANCE_KM.fullmatch(line))), None)
+        via = next((line for line in lines if line.startswith("via ")), None)
+        after_via = lines[lines.index(via) + 1:] if via else []
+        routes[rank] = {
+            "rank": rank, "travel_time_text": travel_time, "travel_time_minutes": duration_minutes(travel_time),
+            "distance_km": float(distance.group(1).replace(",", ".")) if distance else None,
+            "via": via[4:] if via else None,
+            "note": next((line for line in after_via if line not in ("Details", "Preview")), None),
+        }
+    return [routes[rank] for rank in sorted(routes)]
+
+
 def duration_minutes(value: str) -> int:
     hours = re.search(r"(\d+)\s*(?:h|hr|hrs|hour|hours|u|uur)\b", value, re.IGNORECASE)
     minutes = re.search(r"(\d+)\s*(?:min|mins|minute|minutes)\b", value, re.IGNORECASE)
@@ -188,6 +217,10 @@ def capture(page, *, origin: Point, destination: Point, output_dir: Path,
     if route_text and settle_seconds:
         page.wait_for_timeout(settle_seconds * 1000)
         route_text = visible_route_text(page) or route_text
+    try:
+        routes = visible_routes(page) if route_text else []
+    except PlaywrightError:
+        routes = []   # the recommended route is still recorded; only the alternatives are missing
     captured_at = datetime.now(LOCAL_TIMEZONE)
     output_dir.mkdir(parents=True, exist_ok=True)
     travel_time = TRAVEL_TIME.search(route_text).group(0) if route_text else None
@@ -207,6 +240,8 @@ def capture(page, *, origin: Point, destination: Point, output_dir: Path,
         "travel_time_minutes": duration_minutes(travel_time) if travel_time else None,
         "distance_km": float(distance.group(1).replace(",", ".")) if distance else None,
         "route_card_text": route_text,
+        "via": routes[0]["via"] if routes and routes[0]["rank"] == 0 else None,
+        "routes": routes,
         "status": "ok" if route_text else ("consent_required" if "consent.google.com" in page.url
                                              else "route_not_detected"),
         "url": page.url,

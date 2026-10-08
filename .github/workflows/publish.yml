@@ -1,8 +1,9 @@
 name: Publish dashboard
 
-# Rebuild the dashboard data from the latest observations and deploy GitHub Pages.
-# Started by the collector loop after new measurements, or by hand.
+# Rebuild the dashboard data and deploy GitHub Pages, on every push or by hand.
 on:
+  push:
+    branches: [master, main]
   workflow_dispatch:
 
 permissions:
@@ -27,7 +28,6 @@ jobs:
       - name: Build static dashboard data
         run: |
           python -m travelsmart export
-          python scripts/export_commutes.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

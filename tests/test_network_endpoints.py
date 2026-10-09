@@ -115,6 +115,15 @@ def test_gtfs_stations_keep_parents_and_drop_platforms_and_foreign_stops():
     assert stations[0].category == "station" and stations[0].name == "Brussel-Zuid"
 
 
+def test_gtfs_stations_prefer_the_dutch_sncb_name_when_one_is_available():
+    rows = [{"stop_id": "S8814001", "stop_name": "Bruxelles-Midi", "stop_lat": "50.835707",
+             "stop_lon": "4.336531", "location_type": "1", "parent_station": ""},
+            {"stop_id": "S8891009", "stop_name": "Gent-Sint-Pieters", "stop_lat": "51.036",
+             "stop_lon": "3.711", "location_type": "1", "parent_station": ""}]
+    stations = read_gtfs_stations(rows, {"Bruxelles-Midi": "Brussel-Zuid"})
+    assert [station.name for station in stations] == ["Brussel-Zuid", "Gent-Sint-Pieters"]
+
+
 def test_sncb_station_codes_carry_an_s_prefix_their_platforms_do_not():
     # The real feed: stations are location_type 1 with an "S" prefix, foreign places are plain
     # stops with no parent, and a leading "S" must not hide the UIC country code.

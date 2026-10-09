@@ -48,8 +48,20 @@ def download(url: str, target: Path, progress: Progress) -> None:
 
 
 def read_stations(archive: Path) -> list[Endpoint]:
-    with zipfile.ZipFile(archive) as zipped, zipped.open("stops.txt") as stops:
-        return read_gtfs_stations(csv.DictReader(io.TextIOWrapper(stops, encoding="utf-8-sig")))
+    with zipfile.ZipFile(archive) as zipped:
+        with zipped.open("translations.txt") as source:
+            translations = {
+                row["field_value"].strip(): row["translation"].strip()
+                for row in csv.DictReader(io.TextIOWrapper(source, encoding="utf-8-sig"))
+                if row.get("table_name") == "stops"
+                and row.get("field_name") == "stop_name"
+                and row.get("language") == "nl"
+                and (row.get("field_value") or "").strip()
+                and (row.get("translation") or "").strip()
+            }
+        with zipped.open("stops.txt") as stops:
+            return read_gtfs_stations(csv.DictReader(io.TextIOWrapper(stops, encoding="utf-8-sig")),
+                                      translations)
 
 
 def main() -> None:

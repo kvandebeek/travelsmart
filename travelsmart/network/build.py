@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from travelsmart.network.osm import OsmData
 
 MAX_EDGE_METRES = 6000          # longer stretches get split nodes
+MIN_MEASURABLE_METRES = 200     # below this, routing providers cannot locate both endpoints reliably
 REGIONAL_CLUSTER_METRES = 120   # one node per roundabout / dual-carriageway crossing
 CONNECTION_CLUSTER_METRES = 500  # the slip roads of one exit
 SNAP_METRES = 120               # an exit joins an N-road node this close
@@ -366,8 +367,10 @@ def build_network(data: OsmData, update=None) -> Network:
                                           "roads": sorted(set(network.nodes[motor_id]["roads"]) |
                                                           set(network.nodes[connection_id]["roads"])),
                                           "metres": 0, "start": point, "end": point, "path": [point, point]}
+    collapsed = _collapse_unmeasurable_edges(network)
     if update:
-        update(1.0, f"built {len(network.edges):,} directed edges")
+        detail = f"; collapsed {collapsed:,} short pass-through nodes" if collapsed else ""
+        update(1.0, f"built {len(network.edges):,} directed edges{detail}")
     return network
 
 
@@ -441,3 +444,80 @@ def _add_split(network: Network, data: OsmData, kind: str, start_id: str, end_id
             "end": [round(points[path[last]][0], 6), round(points[path[last]][1], 6)],
             "path": [points[n] for n in path[first:last + 1]],
         }
+
+
+def _collapse_unmeasurable_edges(network: Network) -> int:
+    """Remove a short, topology-free regional stop by joining its two road stretches.
+
+    A provider cannot reliably distinguish two points less than 200 m apart.  We must not solve
+    that by blindly joining nearby junctions: a motorway connection, a ramp, or a branch still
+    needs its own routing choice.  This deliberately contracts only a regional/split node with
+    exactly two neighbours and no incident edge other than the two through directions.  Thus every
+    route through the node remains available, but its short leg becomes part of a measurable edge.
+
+    The pass repeats because removing one artificial stop can make its neighbour eligible too.
+    """
+    collapsed = 0
+    while True:
+        incident: dict[str, list[tuple[str, dict]]] = defaultdict(list)
+        for edge_id, edge in network.edges.items():
+            incident[edge["from"]].append((edge_id, edge))
+            incident[edge["to"]].append((edge_id, edge))
+        choice = next((candidate for node_id, edges in incident.items()
+                       if (candidate := _collapse_candidate(network, node_id, edges))), None)
+        if not choice:
+            return collapsed
+        node_id, replacements, removed = choice
+        for edge_id in removed:
+            del network.edges[edge_id]
+        network.edges.update(replacements)
+        del network.nodes[node_id]
+        collapsed += 1
+
+
+def _collapse_candidate(network: Network, node_id: str,
+                        incident: list[tuple[str, dict]]) -> tuple[str, dict, set[str]] | None:
+    """Return one safe contraction at *node_id*, or ``None`` when it is a real junction."""
+    if network.nodes[node_id]["kind"] not in {"regional", "split"}:
+        return None
+    if not incident or any(edge["kind"] != "regional" for _, edge in incident):
+        return None
+    neighbours = {edge["to"] if edge["from"] == node_id else edge["from"] for _, edge in incident}
+    if len(neighbours) != 2:
+        return None
+    first_neighbour, second_neighbour = sorted(neighbours)
+    by_direction: dict[tuple[str, str], list[tuple[str, dict]]] = defaultdict(list)
+    for item in incident:
+        edge_id, edge = item
+        by_direction[edge["from"], edge["to"]].append(item)
+
+    replacements, consumed = {}, set()
+    for start, end in ((first_neighbour, second_neighbour), (second_neighbour, first_neighbour)):
+        incoming = by_direction[start, node_id]
+        outgoing = by_direction[node_id, end]
+        # Parallel alternatives are distinct roads, not an artefact a contraction may erase.
+        if len(incoming) != len(outgoing):
+            return None
+        for (first_id, first), (second_id, second) in zip(incoming, outgoing):
+            if first["metres"] + second["metres"] > MAX_EDGE_METRES:
+                return None
+            # A logical node can represent several nearby OSM points.  Only combine geometry that
+            # actually meets, otherwise the saved path would draw a fictitious straight connector.
+            if metres(tuple(first["end"]), tuple(second["start"])) > 2:
+                return None
+            edge_id = _edge_id("regional", start, end)
+            if edge_id in network.edges or edge_id in replacements:
+                return None
+            replacements[edge_id] = {
+                "from": start, "to": end, "kind": "regional",
+                "roads": list(dict.fromkeys(first["roads"] + second["roads"])),
+                "metres": first["metres"] + second["metres"],
+                "start": first["start"], "end": second["end"],
+                "path": first["path"] + second["path"][1:],
+            }
+            consumed.update((first_id, second_id))
+    if consumed != {edge_id for edge_id, _ in incident}:
+        return None
+    if not any(network.edges[edge_id]["metres"] < MIN_MEASURABLE_METRES for edge_id in consumed):
+        return None
+    return node_id, replacements, consumed

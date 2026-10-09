@@ -1,6 +1,7 @@
 """The network builder on small hand-made road layouts (coordinates near 51 N, 5 E)."""
 
-from travelsmart.network.build import MAX_EDGE_METRES, Network, _add_split, build_network, metres, road_numbers
+from travelsmart.network.build import (MAX_EDGE_METRES, MIN_MEASURABLE_METRES, Network, _add_split,
+                                       build_network, metres, road_numbers)
 from travelsmart.network.connectors import select_network_ways
 from travelsmart.network.osm import (EXIT_ACCESS_HOPS, OsmData, _add_paired_backbone_carriageways,
                                      connector_candidate, exit_access_candidate,
@@ -179,6 +180,32 @@ def test_short_road_between_two_exit_junctions_keeps_its_length():
     assert ("c21", "c20") not in edges_of(network, "regional")
     assert next(e["metres"] for e in network.edges.values()
                 if e["kind"] == "regional" and e["from"] == "c20") > 50
+
+
+def test_short_regional_pass_through_is_merged_into_a_measurable_edge():
+    # The middle node has no branch or special motorway role.  Leaving it as a 100 m leg only
+    # creates a provider waypoint that cannot be located reliably; the two stretches are one road.
+    data = layout(
+        [(1, [1, 2], {"highway": "primary", "ref": "N2"}),
+         (2, [2, 3], {"highway": "primary", "ref": "N3"})],
+        {1: (0, 0), 2: (0.15, 0), 3: (2, 0)})
+    network = build_network(data)
+    assert "r2" not in network.nodes
+    edges = [edge for edge in network.edges.values() if edge["kind"] == "regional"]
+    assert {(edge["from"], edge["to"]) for edge in edges} == {("r1", "r3"), ("r3", "r1")}
+    assert all(edge["metres"] >= MIN_MEASURABLE_METRES for edge in edges)
+
+
+def test_short_regional_branch_is_not_collapsed_away():
+    # A short approach to a three-way choice is still a real routing decision, so it must stay.
+    data = layout(
+        [(1, [1, 2], {"highway": "primary", "ref": "N2"}),
+         (2, [2, 3], {"highway": "primary", "ref": "N3"}),
+         (3, [2, 4], {"highway": "primary", "ref": "N4"})],
+        {1: (0, 0), 2: (0.15, 0), 3: (2, 0), 4: (0.15, 2)})
+    network = build_network(data)
+    assert "r2" in network.nodes
+    assert any(edge["metres"] < MIN_MEASURABLE_METRES for edge in network.edges.values())
 
 
 def test_only_local_roads_needed_by_an_exit_are_selected():

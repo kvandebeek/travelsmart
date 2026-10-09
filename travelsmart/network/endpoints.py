@@ -56,13 +56,14 @@ def in_belgium(lat: float, lon: float) -> bool:
     return south <= lat <= north and west <= lon <= east
 
 
-def read_gtfs_stations(rows) -> list[Endpoint]:
+def read_gtfs_stations(rows, translations: dict[str, str] | None = None) -> list[Endpoint]:
     """Stations from GTFS stops rows (csv.DictReader over stops.txt).
 
     A GTFS feed lists every platform as its own stop. Only the parent station is an endpoint, or the
     stop itself where a feed models no parents at all; otherwise one station becomes a dozen
     endpoints a few metres apart.
     """
+    translations = translations or {}
     stations = []
     for row in rows:
         location_type = (row.get("location_type") or "").strip()
@@ -84,8 +85,9 @@ def read_gtfs_stations(rows) -> list[Endpoint]:
                 continue
         elif not in_belgium(lat, lon):
             continue
+        name = (row.get("stop_name") or "").strip()
         stations.append(Endpoint(id=f"station:{stop_id}", category="station",
-                                 name=(row.get("stop_name") or "").strip(), lat=lat, lon=lon))
+                                 name=translations.get(name, name), lat=lat, lon=lon))
     return stations
 
 
